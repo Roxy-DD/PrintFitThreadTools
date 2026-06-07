@@ -42,12 +42,17 @@ FIT_ALIASES = {
     "sprocket": "xy",
     "齿轮": "xy",
     "轴类": "xy",
+    "universal": "universal",
+    "offset": "universal",
+    "true_offset": "universal",
+    "通用": "universal",
+    "万能": "universal",
+    "异形": "universal",
     "xyz": "xyz",
     "all": "xyz",
     "generic": "xyz",
     "envelope": "xyz",
     "body": "xyz",
-    "通用": "xyz",
     "包络": "xyz",
     "manual": "manual",
     "scale": "manual",
@@ -103,10 +108,10 @@ class AdapterConfig:
     cut: bool
     keep_tool: bool
     seal: str
-    seal_direction: str
-    seal_depth_mm: float
+    seal_length_mm: float
     seal_oversize: float
     warning_messages: Tuple[str, ...] = ()
+    center_point: Optional[Tuple[float, float, float]] = None
 
 
 CompanionConfig = AdapterConfig
@@ -125,8 +130,8 @@ def clearance_scale_ratio(nominal_diameter_mm: float, clearance_mm: float) -> fl
 
     if nominal_diameter_mm <= 0:
         raise ValueError("diameter must be greater than 0 mm")
-    if clearance_mm < 0:
-        raise ValueError("clearance must not be negative")
+    if nominal_diameter_mm + 2.0 * clearance_mm <= 0:
+        raise ValueError("clearance %g mm collapses diameter %g mm" % (clearance_mm, nominal_diameter_mm))
     return (nominal_diameter_mm + 2.0 * clearance_mm) / nominal_diameter_mm
 
 
@@ -159,7 +164,7 @@ def calculate_fit_scales(config: AdapterConfig, size_xyz_mm: Tuple[float, float,
             config.scale_z if config.scale_z is not None else 1.0,
         )
 
-    if config.fit == "xyz":
+    if config.fit == "xyz" or config.fit == "universal":
         default_x = config.fit_adjust_mm if config.operation == "part" else config.clearance_x_mm
         default_y = config.fit_adjust_mm if config.operation == "part" else config.clearance_y_mm
         default_z = config.fit_adjust_mm if config.operation == "part" else config.clearance_z_mm
@@ -244,9 +249,8 @@ def normalize_key(key: str) -> str:
         "keep_tools": "keep_tool",
         "cap": "seal",
         "seal_mode": "seal",
-        "seal_dir": "seal_direction",
-        "cap_dir": "seal_direction",
-        "cap_depth": "seal_depth",
+        "seal_length": "seal_length",
+        "cap_length": "seal_length",
     }
     normalized = key.strip().lower().replace("-", "_").replace(" ", "_")
     return aliases.get(normalized, normalized)
@@ -284,6 +288,8 @@ def _str_from(params: Dict[str, str], key: str, default: str) -> str:
 
 def get_preset(name: str) -> Dict[str, float]:
     normalized = name.strip().upper().replace(" ", "")
+    if normalized == "自定义":
+        return {"diameter": 4.0, "outer": 8.0, "thickness": 4.0, "pitch": 0.7}
     if normalized not in METRIC_COARSE_PRESETS:
         raise ValueError("unknown preset %r" % name)
     return METRIC_COARSE_PRESETS[normalized]
@@ -329,8 +335,13 @@ def normalize_blank(value: str) -> str:
     return blank
 
 
-def build_config(text: str) -> AdapterConfig:
-    params = parse_key_values(text)
+from typing import Dict, Iterable, List, Optional, Tuple, Union
+
+def build_config(params: Union[str, Dict[str, str]]) -> AdapterConfig:
+    if isinstance(params, str):
+        params = parse_key_values(params)
+    elif not isinstance(params, dict):
+        raise TypeError("params must be dict or str")
 
     raw_fit = params.get("fit", "")
     raw_operation = params.get("operation", "")
@@ -346,7 +357,7 @@ def build_config(text: str) -> AdapterConfig:
             raw_fit = "xyz"
 
     has_thread_hint = "preset" in params or "diameter" in params
-    default_fit = "thread_xy" if has_thread_hint else "xy"
+    default_fit = "thread_xy" if has_thread_hint else "universal"
     fit = normalize_fit(raw_fit) if raw_fit else default_fit
 
     preset_name = _str_from(params, "preset", "M4").upper().replace(" ", "")
@@ -354,12 +365,12 @@ def build_config(text: str) -> AdapterConfig:
 
     diameter = _float_from(params, "diameter", preset["diameter"])
     clearance = _float_from(params, "clearance", 0.20)
-    thread_scale = clearance_scale_ratio(diameter, max(clearance, 0.0))
+    thread_scale = clearance_scale_ratio(diameter, clearance)
 
     xy_clearance = _optional_float_from(params, "xy_clearance")
     clearance_x = _float_from(params, "clearance_x", xy_clearance if xy_clearance is not None else clearance)
     clearance_y = _float_from(params, "clearance_y", xy_clearance if xy_clearance is not None else clearance)
-    clearance_z_default = clearance if fit == "xyz" else 0.0
+    clearance_z_default = clearance if fit in {"xyz", "universal"} else 0.0
     clearance_z = _float_from(params, "clearance_z", clearance_z_default)
 
     fit_adjust = _float_from(params, "fit_adjust", 0.0)
@@ -376,13 +387,14 @@ def build_config(text: str) -> AdapterConfig:
     center = _str_from(params, "center", center_default).lower().replace(" ", "_")
     if center in {"box", "body", "auto"}:
         center = "bbox"
-    if center not in {"origin", "bbox"}:
-        raise ValueError("center must be origin or bbox")
+    if center not in {"origin", "bbox", "smart"}:
+        raise ValueError("center must be origin, bbox or smart")
 
-    blank_default = "none" if operation in {"tool", "part"} else ("hex" if fit == "thread_xy" else "box")
-    blank = normalize_blank(_str_from(params, "blank", blank_default))
-    if operation in {"tool", "part"} and "blank" not in params:
+    if operation in {"tool", "part"}:
         blank = "none"
+    else:
+        blank_default = "hex" if fit == "thread_xy" else "box"
+        blank = normalize_blank(_str_from(params, "blank", blank_default))
 
     has_outer = "outer" in params
     outer = _optional_float_from(params, "outer") if has_outer else (preset["outer"] if fit == "thread_xy" else None)
@@ -409,15 +421,12 @@ def build_config(text: str) -> AdapterConfig:
     if seal not in {"none", "cylinder"}:
         raise ValueError("seal must be none or cylinder")
 
-    seal_direction = _str_from(params, "seal_direction", "+z").lower().replace(" ", "")
-    if seal_direction not in {"+z", "-z"}:
-        raise ValueError("seal_direction must be +z or -z")
-    seal_depth = _float_from(params, "seal_depth", 0.0)
-    seal_oversize = _float_from(params, "seal_oversize", 1.02)
+    seal_length = _float_from(params, "seal_length", 2.0)
+    seal_oversize = _float_from(params, "seal_oversize", 1.0)
 
     if outer is not None and outer <= 0:
         raise ValueError("outer must be greater than 0 mm")
-    if outer is not None and fit == "thread_xy" and blank != "none" and outer <= diameter + 2.0 * max(clearance, 0.0):
+    if outer is not None and fit == "thread_xy" and blank != "none" and outer <= diameter + 2.0 * clearance:
         raise ValueError("outer must be larger than the enlarged cutter diameter")
     if thickness is not None and thickness <= 0 and blank != "none":
         raise ValueError("thickness must be greater than 0 mm")
@@ -425,8 +434,8 @@ def build_config(text: str) -> AdapterConfig:
         raise ValueError("box_x must be greater than 0 mm")
     if box_y is not None and box_y <= 0:
         raise ValueError("box_y must be greater than 0 mm")
-    if seal_depth < 0:
-        raise ValueError("seal_depth must not be negative")
+    if seal_length < 0:
+        raise ValueError("seal_length must not be negative")
     if seal_oversize <= 0:
         raise ValueError("seal_oversize must be greater than 0")
 
@@ -436,8 +445,6 @@ def build_config(text: str) -> AdapterConfig:
         warnings.append("clearance is 0, this will not add print-fit allowance")
     if operation == "part" and fit == "manual" and not any(value is not None for value in (scale_x, scale_y, scale_z)):
         warnings.append("operation=part with fit=manual has no scale override, so the copied part will remain unchanged")
-    if seal == "cylinder" and seal_depth == 0:
-        warnings.append("seal=cylinder was requested but seal_depth is 0, so no cap will be created")
     if fit != "thread_xy" and center == "origin":
         warnings.append("generic fits usually use center=bbox; center=origin can intentionally shift the result if the body is off origin")
 
@@ -469,8 +476,7 @@ def build_config(text: str) -> AdapterConfig:
         cut=cut,
         keep_tool=keep_tool,
         seal=seal,
-        seal_direction=seal_direction,
-        seal_depth_mm=seal_depth,
+        seal_length_mm=seal_length,
         seal_oversize=seal_oversize,
         warning_messages=tuple(warnings),
     )

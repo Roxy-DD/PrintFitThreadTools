@@ -15,12 +15,17 @@ import math
 import os
 import sys
 import traceback
+import dataclasses
+import importlib
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 LIB_DIR = os.path.join(SCRIPT_DIR, "lib")
 if LIB_DIR not in sys.path:
     sys.path.insert(0, LIB_DIR)
+
+import threadfit_core
+importlib.reload(threadfit_core)
 
 from threadfit_core import (  # noqa: E402
     AdapterConfig,
@@ -52,10 +57,18 @@ OPERATION_OPTIONS = {
     "生成打印补偿副本": "part",
 }
 FIT_OPTIONS = {
-    "螺纹 XY 间隙": "thread",
-    "通用 XY 包络": "xy",
-    "通用 XYZ 包络": "xyz",
-    "手动缩放": "manual",
+    "径向缩放 (仅 XY 方向, 需零件直立)": "thread",
+    "等比缩放 (XYZ 方向)": "xyz",
+    "真实面偏移 (法向等距)": "universal",
+    "手动指定比例": "manual",
+}
+FIT_PROFILES = {
+    "宽松插入 (+0.20mm)": "0.20 mm",
+    "普通配合 (+0.10mm)": "0.10 mm",
+    "精准/滑动 (+0.05mm)": "0.05 mm",
+    "无公差 (0.00mm)": "0.00 mm",
+    "过盈/热熔 (-0.15mm)": "-0.15 mm",
+    "自定义": ""
 }
 BLANK_OPTIONS = {
     "矩形底座": "box",
@@ -64,10 +77,11 @@ BLANK_OPTIONS = {
     "不生成底座": "none",
 }
 CENTER_OPTIONS = {
-    "自动：包围盒中心": "bbox",
-    "原点：适合螺纹轴心在原点": "origin",
+    "智能：基于点选圆提取 (推荐)": "smart",
+    "自动：包围盒中心 (适合对称体)": "bbox",
+    "原点：全局坐标系原点": "origin",
 }
-PRESET_OPTIONS = ("M2", "M2.5", "M3", "M4", "M5", "M6", "M8", "M10")
+PRESET_OPTIONS = ("M2", "M2.5", "M3", "M4", "M5", "M6", "M8", "M10", "自定义")
 
 _handlers = []
 _ui = None
@@ -88,12 +102,14 @@ class CommandCreatedHandler(_handler_base("CommandCreatedEventHandler")):
             _build_command_dialog(inputs)
 
             execute_handler = ExecuteHandler()
+            execute_preview_handler = ExecutePreviewHandler()
             validate_handler = ValidateInputsHandler()
             input_changed_handler = InputChangedHandler()
             activate_handler = ActivateHandler()
             destroy_handler = DestroyHandler()
 
             command.execute.add(execute_handler)
+            command.executePreview.add(execute_preview_handler)
             command.validateInputs.add(validate_handler)
             command.inputChanged.add(input_changed_handler)
             command.activate.add(activate_handler)
@@ -101,39 +117,40 @@ class CommandCreatedHandler(_handler_base("CommandCreatedEventHandler")):
 
             _handlers.extend([
                 execute_handler,
+                execute_preview_handler,
                 validate_handler,
                 input_changed_handler,
                 activate_handler,
                 destroy_handler,
             ])
         except Exception:
-            if _ui:
-                _ui.messageBox("创建命令面板失败：\n\n%s" % traceback.format_exc())
+            _log_error("创建命令面板失败", traceback.format_exc(), show_message_box=True)
 
 
 class ExecuteHandler(_handler_base("CommandEventHandler")):
     def notify(self, args):
         try:
-            app = adsk.core.Application.get()
-            design = adsk.fusion.Design.cast(app.activeProduct)
-            if not design:
-                _ui.messageBox("请先打开 Fusion 360 Design 文件。")
-                return
-
-            command = args.command
-            inputs = command.commandInputs
-            bodies = _bodies_from_selection_input(inputs.itemById("source_bodies"))
-            if not bodies:
-                _ui.messageBox("请至少选择一个实体 Body。")
-                return
-
-            config_text = _config_text_from_inputs(inputs)
-            config = build_config(config_text)
-            result = create_print_fit_adapter(design.rootComponent, bodies, config)
-            _ui.messageBox(_format_result_message(config, result))
+            result = _run_execution_pipeline(args.command.commandInputs, is_preview=False)
+            if result is not None:
+                config, res_dict = result
+                _ui.messageBox(_format_result_message(config, res_dict))
         except Exception:
-            if _ui:
-                _ui.messageBox("执行失败：\n\n%s" % traceback.format_exc())
+            _log_error("执行失败", traceback.format_exc(), show_message_box=True)
+
+
+class ExecutePreviewHandler(_handler_base("CommandEventHandler")):
+    def notify(self, args):
+        try:
+            _run_execution_pipeline(args.command.commandInputs, is_preview=True)
+            args.isValidResult = True
+        except Exception as e:
+            err = traceback.format_exc()
+            try:
+                with open(r"d:\项目文件\code\3d打印标准件\fusion\PrintFitThreadTools\debug_error.log", "w", encoding="utf-8") as f:
+                    f.write(err)
+            except:
+                pass
+            _log_error("预览失败", err, show_message_box=False)
 
 
 class ValidateInputsHandler(_handler_base("ValidateInputsEventHandler")):
@@ -144,6 +161,71 @@ class ValidateInputsHandler(_handler_base("ValidateInputsEventHandler")):
             args.areInputsValid = bool(selection_input and selection_input.selectionCount > 0)
         except Exception:
             args.areInputsValid = False
+            _log_error("验证输入失败", traceback.format_exc(), show_message_box=False)
+
+def _run_execution_pipeline(inputs, is_preview: bool):
+    app = adsk.core.Application.get()
+    design = adsk.fusion.Design.cast(app.activeProduct)
+    if not design:
+        if not is_preview and _ui:
+            _ui.messageBox("请先打开 Fusion 360 Design 文件。")
+        return None
+
+    progress = None
+    if not is_preview and _ui:
+        progress = _ui.createProgressDialog()
+        progress.cancelButtonText = "Cancel"
+        progress.isBackgroundDependent = False
+        progress.isCancelButtonShown = False
+        progress.show("3D 打印标准件适配", "正在分析几何体...", 0, 100, 0)
+
+    try:
+        if progress:
+            progress.message = "正在提取并分析选定实体..."
+            progress.progressValue = 10
+            adsk.doEvents()
+
+        bodies = _bodies_from_selection_input(inputs.itemById("source_bodies"))
+        if not bodies:
+            if not is_preview and _ui:
+                _ui.messageBox("请至少选择一个实体 Body。")
+            return None
+
+        config_dict = _config_dict_from_inputs(inputs)
+        config = build_config(config_dict)
+        
+        center_entity = None
+        if config.center == "smart":
+            dia_ref = inputs.itemById("diameter_ref")
+            if dia_ref and dia_ref.selectionCount > 0:
+                center_entity = dia_ref.selection(0).entity
+        
+        bottom_ref_input = inputs.itemById("bottom_ref")
+        bottom_entity = bottom_ref_input.selection(0).entity if bottom_ref_input and bottom_ref_input.selectionCount > 0 else None
+        
+        top_ref_input = inputs.itemById("top_ref")
+        top_entity = top_ref_input.selection(0).entity if top_ref_input and top_ref_input.selectionCount > 0 else None
+        
+        seal_ref_input = inputs.itemById("seal_ref")
+        seal_entity = seal_ref_input.selection(0).entity if seal_ref_input and seal_ref_input.selectionCount > 0 else None
+        
+        if progress:
+            progress.message = "正在计算实体布尔和缩放操作..."
+            progress.progressValue = 40
+            adsk.doEvents()
+            
+        result = create_print_fit_adapter(design.rootComponent, bodies, config, top_entity, bottom_entity, center_entity, seal_entity=seal_entity, is_preview=is_preview, progress=progress)
+        
+        if progress:
+            progress.progressValue = 100
+            progress.hide()
+            
+        return config, result
+        
+    except Exception as e:
+        if progress:
+            progress.hide()
+        raise e
 
 
 class InputChangedHandler(_handler_base("InputChangedEventHandler")):
@@ -151,9 +233,43 @@ class InputChangedHandler(_handler_base("InputChangedEventHandler")):
         try:
             changed_id = args.input.id if args.input else ""
             _sync_dialog_visibility(args.inputs, changed_id)
+            
+            if changed_id == "diameter_ref":
+                dia_ref = args.inputs.itemById("diameter_ref")
+                if dia_ref and dia_ref.selectionCount > 0:
+                    entity = dia_ref.selection(0).entity
+                    radius_cm = None
+                    if entity.objectType in (adsk.fusion.BRepEdge.classType(), "adsk::fusion::BRepEdgeProxy") and (entity.geometry.objectType == adsk.core.Circle3D.classType() or entity.geometry.objectType == adsk.core.Arc3D.classType()):
+                        radius_cm = entity.geometry.radius
+                    elif entity.objectType in (adsk.fusion.BRepFace.classType(), "adsk::fusion::BRepFaceProxy") and entity.geometry.objectType == adsk.core.Cylinder.classType():
+                        radius_cm = entity.geometry.radius
+                    
+                    if radius_cm is not None:
+                        dia_mm = cm_to_mm(radius_cm * 2.0)
+                        preset = args.inputs.itemById("preset")
+                        if preset:
+                            _select_dropdown_label(preset, "自定义")
+                        dia_input = args.inputs.itemById("diameter")
+                        if dia_input:
+                            dia_input.expression = "%.3f mm" % dia_mm
+            
+            elif changed_id == "fit_profile":
+                profile = args.inputs.itemById("fit_profile")
+                if profile and profile.selectedItem.name != "自定义":
+                    val_str = FIT_PROFILES.get(profile.selectedItem.name)
+                    if val_str:
+                        for cid in ("clearance", "clearance_x", "clearance_y"):
+                            inp = args.inputs.itemById(cid)
+                            if inp:
+                                inp.expression = val_str
+            
+            elif changed_id in ("clearance", "clearance_x", "clearance_y", "clearance_z"):
+                profile = args.inputs.itemById("fit_profile")
+                if profile:
+                    _select_dropdown_label(profile, "自定义")
+                            
         except Exception:
-            if _ui:
-                _ui.messageBox("更新面板状态失败：\n\n%s" % traceback.format_exc())
+            _log_error("更新面板状态失败", traceback.format_exc(), show_message_box=False)
 
 
 class ActivateHandler(_handler_base("CommandEventHandler")):
@@ -175,6 +291,19 @@ class ActivateHandler(_handler_base("CommandEventHandler")):
 class DestroyHandler(_handler_base("CommandEventHandler")):
     def notify(self, args):
         pass
+
+def _log_error(title, trace, show_message_box=False):
+    message = f"[{title}]\n{trace}"
+    print(message)
+    try:
+        app = adsk.core.Application.get()
+        text_palette = app.userInterface.palettes.itemById('TextCommands')
+        if text_palette:
+            text_palette.writeText(message)
+    except:
+        pass
+    if show_message_box and _ui:
+        _ui.messageBox(message)
 
 
 def run(context):
@@ -236,7 +365,7 @@ def _build_command_dialog(inputs):
         "overview",
         "",
         "<b>3D 打印标准件适配</b><br/>选择实体，设置公差和底座形状，然后自动生成配套底座、布尔刀具或打印补偿副本。",
-        2,
+        3,
         True,
     )
     overview.isFullWidth = True
@@ -245,23 +374,88 @@ def _build_command_dialog(inputs):
     selection_input.addSelectionFilter("SolidBodies")
     selection_input.setSelectionLimits(1, 0)
 
-    main_group = inputs.addGroupCommandInput("main_group", "策略")
-    main_group.isExpanded = True
-    main_inputs = main_group.children
-    _add_dropdown(main_inputs, "operation", "操作类型", OPERATION_OPTIONS, "生成配套底座/孔槽")
-    _add_dropdown(main_inputs, "fit", "适配策略", FIT_OPTIONS, "螺纹 XY 间隙")
-    _add_dropdown(main_inputs, "preset", "螺纹规格", {name: name for name in PRESET_OPTIONS}, "M4")
-    _add_value(main_inputs, "diameter", "自定义直径", "4.0 mm")
-    _add_value(main_inputs, "clearance", "单边公差", "0.20 mm")
-    _add_value(main_inputs, "clearance_x", "X 单边公差", "0.20 mm")
-    _add_value(main_inputs, "clearance_y", "Y 单边公差", "0.20 mm")
-    _add_value(main_inputs, "clearance_z", "Z 单边公差", "0.00 mm")
-    _add_value(main_inputs, "fit_adjust", "零件每边补偿", "-0.10 mm")
+    tab_core = inputs.addTabCommandInput("tab_core", "零件与公差")
+    tab_geom = inputs.addTabCommandInput("tab_geom", "底座边界")
+    tab_adv = inputs.addTabCommandInput("tab_adv", "专家模式")
 
-    blank_group = inputs.addGroupCommandInput("blank_group", "底座/毛坯")
+    # 标签页 1：零件与公差
+    core_inputs = tab_core.children
+    op_input = _add_dropdown(core_inputs, "operation", "操作类型", OPERATION_OPTIONS, "生成配套底座/孔槽")
+    op_input.tooltip = "选择要生成的结果类型"
+    op_input.tooltipDescription = (
+        "【配套底座/孔槽】：直接在外围生成带公差的孔槽底座。适用场景：为零件制作专属的安装底座，或快速打印公差配合测试件。\n"
+        "【生成刀具体】：提取放大后的零件本体（不含底座）。适用场景：将其作为“刻刀”，在您设计的复杂机械外壳上，使用布尔运算精准挖出安装孔。\n"
+        "【打印补偿副本】：对原零件本身进行尺寸补偿。适用场景：直接 3D 打印该零件时，预先抵消塑料热收缩误差（如缩小0.15mm），确保打印成品能顺利装配。"
+    )
+    op_desc = core_inputs.addTextBoxCommandInput("op_desc", "", "", 2, True)
+    op_desc.isFullWidth = True
+
+    fit_input = _add_dropdown(core_inputs, "fit", "适配策略", FIT_OPTIONS, "径向缩放 (仅 XY 方向, 需零件直立)")
+    fit_input.tooltip = "选择间隙生成的计算底层原理"
+    fit_input.tooltipDescription = "【径向缩放 (仅 XY 方向, 需零件直立)】：底部Z轴保持不变，专为螺丝/螺纹设计，保护螺距不被破坏。注意：必须确保零件在绝对坐标系中竖直向上放置 (Z-up)，否则由于 Fusion 360 缩放轴向限制，会导致变形！\n【等比缩放 (XYZ 方向)】：全方向均匀放大，速度极快，适合大部分对称零件。\n【真实面偏移】：沿法线严格推覆，极其精准但面数多时极其耗时。"
+
+    preset_input = _add_dropdown(core_inputs, "preset", "螺纹规格", {name: name for name in PRESET_OPTIONS}, "M4")
+    preset_input.tooltip = "快速选择标准件的外径尺寸"
+
+    dia_ref = core_inputs.addSelectionInput("diameter_ref", "圆柱参考/定心点 (可选)", "选择圆柱面/圆边提取直径和圆心。或者单独选择一个顶点/草图点来强制指定圆心（此时需手动输入直径）。")
+    dia_ref.addSelectionFilter("CircularEdges")
+    dia_ref.addSelectionFilter("CylindricalFaces")
+    dia_ref.addSelectionFilter("Vertices")
+    dia_ref.addSelectionFilter("SketchPoints")
+    dia_ref.addSelectionFilter("ConstructionPoints")
+    dia_ref.setSelectionLimits(0, 1)
+    dia_ref.tooltip = "智能提取圆心与直径"
+    dia_ref.tooltipDescription = "如果您不知道模型直径，请点选屏幕上的圆环边缘或圆柱面，系统会自动提取其真实的直径并填入下方，同时全参数化绑定该几何中心。\n如果您只想自定义缩放中心而不修改直径，请直接选择屏幕上的某个点（顶点、草图点等）。"
+
+    _add_value(core_inputs, "diameter", "自定义直径", "4.0 mm")
+
+    fit_prof = _add_dropdown(core_inputs, "fit_profile", "公差预设", {k: k for k in FIT_PROFILES}, "宽松插入 (+0.20mm)")
+    fit_prof.tooltip = "快速设置常见的 3D 打印公差"
+    fit_prof.tooltipDescription = "宽松插入：适合需要顺滑插入、经常拔插的零件。\n精准/滑动：适合要求严丝合缝的卡扣或滑动件。\n过盈/热熔：用于强行压入或用电烙铁加热植入铜花母（热熔嵌件）。"
+
+    clear_input = _add_value(core_inputs, "clearance", "单边公差", "0.20 mm")
+    clear_input.tooltip = "零件四周预留的装配空隙"
+    clear_input.tooltipDescription = "通常 3D 打印推荐设置在 0.15mm - 0.25mm 之间。此数值将生成为全局参数，可随时修改。"
+
+    seal_enable = core_inputs.addBoolValueInput("seal_enable", "开启封头 (填平坑洞并突破)", True, "", False)
+    seal_enable.tooltip = "将坑洞完全填平为实心，并可向外延伸"
+    seal_enable.tooltipDescription = "勾选后，插件会自动填满您选择的平面或坑底，并可以往外挤出一段距离，形成一个无缝的完美打孔刀具。"
+    
+    seal_ref = core_inputs.addSelectionInput("seal_ref", "封头起点面 (必选)", "请点选螺丝顶面或内六角坑的底面。插件将从该高度开始填平并向外突破。")
+    seal_ref.addSelectionFilter("PlanarFaces")
+    seal_ref.addSelectionFilter("CircularEdges")
+    seal_ref.setSelectionLimits(0, 1)
+    
+    seal_length = _add_value(core_inputs, "seal_length", "向外突破长度", "2 mm")
+    seal_length.tooltip = "封头高出螺丝顶部的额外贯穿距离"
+    seal_length.tooltipDescription = "确保刀具有足够的长度刺穿外壳。如果您只想要填平坑洞而不冒出头，可以设为 0 mm。"
+
+    # 标签页 2：底座边界
+    geom_inputs = tab_geom.children
+
+    blank_group = geom_inputs.addGroupCommandInput("blank_group", "底座/毛坯设置")
     blank_group.isExpanded = True
     blank_inputs = blank_group.children
-    _add_dropdown(blank_inputs, "blank", "底座形状", BLANK_OPTIONS, "六角螺母")
+    _add_dropdown(blank_inputs, "blank", "底座生成方式", BLANK_OPTIONS, "矩形底座")
+    
+    bottom_ref = blank_inputs.addSelectionInput("bottom_ref", "底面参考 (可选)", "选择模型表面、顶点作为底座底面")
+    bottom_ref.addSelectionFilter("SolidFaces")
+    bottom_ref.addSelectionFilter("ConstructionPlanes")
+    bottom_ref.addSelectionFilter("Vertices")
+    bottom_ref.addSelectionFilter("SketchPoints")
+    bottom_ref.setSelectionLimits(0, 1)
+    bottom_ref.tooltip = "拉伸底座的起始边界"
+    bottom_ref.tooltipDescription = "点击模型表面或顶点，底座将以此为起点。\n如果不选，系统将自动使用包围盒计算。"
+    
+    top_ref = blank_inputs.addSelectionInput("top_ref", "顶面参考 (可选)", "选择模型表面、顶点作为底座顶面")
+    top_ref.addSelectionFilter("SolidFaces")
+    top_ref.addSelectionFilter("ConstructionPlanes")
+    top_ref.addSelectionFilter("Vertices")
+    top_ref.addSelectionFilter("SketchPoints")
+    top_ref.setSelectionLimits(0, 1)
+    top_ref.tooltip = "拉伸底座的终止边界"
+    top_ref.tooltipDescription = "点击模型表面或顶点，底座将刚好贴合至该处。\n如果不选，系统将自动使用包围盒计算。"
+    
     _add_value(blank_inputs, "outer", "外径/六角对边", "8.0 mm")
     _add_value(blank_inputs, "box_x", "矩形 X 尺寸", "0 mm")
     _add_value(blank_inputs, "box_y", "矩形 Y 尺寸", "0 mm")
@@ -269,18 +463,19 @@ def _build_command_dialog(inputs):
     _add_value(blank_inputs, "z_start", "底面 Z", "0 mm")
     _add_value(blank_inputs, "margin", "自动边距", "2.0 mm")
 
-    advanced_group = inputs.addGroupCommandInput("advanced_group", "高级")
-    advanced_group.isExpanded = False
-    advanced_inputs = advanced_group.children
-    _add_dropdown(advanced_inputs, "center", "缩放中心", CENTER_OPTIONS, "原点：适合螺纹轴心在原点")
-    advanced_inputs.addStringValueInput("scale_x", "手动 X 比例", "")
-    advanced_inputs.addStringValueInput("scale_y", "手动 Y 比例", "")
-    advanced_inputs.addStringValueInput("scale_z", "手动 Z 比例", "")
-    advanced_inputs.addBoolValueInput("cut", "执行布尔切割", True, "", True)
-    advanced_inputs.addBoolValueInput("keep_tool", "保留刀具", True, "", True)
-    _add_dropdown(advanced_inputs, "seal", "封头方式", {"不封头": "none", "圆柱封头": "cylinder"}, "不封头")
-    _add_value(advanced_inputs, "seal_depth", "封头深度", "0 mm")
-    _add_dropdown(advanced_inputs, "seal_direction", "封头方向", {"+Z": "+z", "-Z": "-z"}, "+Z")
+    # 标签页 3：专家模式
+    adv_inputs = tab_adv.children
+    _add_value(adv_inputs, "clearance_x", "X 单边公差", "0.20 mm")
+    _add_value(adv_inputs, "clearance_y", "Y 单边公差", "0.20 mm")
+    _add_value(adv_inputs, "clearance_z", "Z 单边公差", "0.00 mm")
+    _add_value(adv_inputs, "fit_adjust", "零件每边补偿", "-0.10 mm")
+    
+    _add_dropdown(adv_inputs, "center", "缩放中心", CENTER_OPTIONS, "原点：适合螺纹轴心在原点")
+    adv_inputs.addStringValueInput("scale_x", "手动 X 比例", "")
+    adv_inputs.addStringValueInput("scale_y", "手动 Y 比例", "")
+    adv_inputs.addStringValueInput("scale_z", "手动 Z 比例", "")
+    adv_inputs.addBoolValueInput("cut", "执行布尔切割", True, "", True)
+    adv_inputs.addBoolValueInput("keep_tool", "保留刀具", True, "", True)
 
     _sync_dialog_visibility(inputs)
 
@@ -307,6 +502,8 @@ def _sync_dialog_visibility(inputs, changed_id=""):
     has_blank = operation == "cavity" and blank != "none"
 
     _set_visible(inputs, ("preset", "diameter"), is_thread)
+    _set_visible(inputs, ("diameter_ref",), True)
+    _set_visible(inputs, ("fit_profile",), not is_part and not is_manual)
     _set_visible(inputs, ("clearance",), not is_part and not is_manual)
     _set_visible(inputs, ("clearance_x", "clearance_y", "clearance_z"), not is_thread and not is_manual and not is_part)
     _set_visible(inputs, ("fit_adjust",), is_part and not is_manual)
@@ -316,13 +513,29 @@ def _sync_dialog_visibility(inputs, changed_id=""):
     _set_visible(inputs, ("thickness", "z_start", "margin"), has_blank)
     _set_visible(inputs, ("scale_x", "scale_y", "scale_z"), is_manual)
     _set_visible(inputs, ("cut",), operation == "cavity")
-    _set_visible(inputs, ("keep_tool", "seal", "seal_depth", "seal_direction"), operation != "part")
+    _set_visible(inputs, ("keep_tool",), operation != "part")
+    
+    seal_enable_input = inputs.itemById("seal_enable")
+    is_seal = seal_enable_input and seal_enable_input.value
+    _set_visible(inputs, ("seal_enable",), operation == "tool")
+    _set_visible(inputs, ("seal_ref", "seal_length"), operation == "tool" and is_seal)
+
+    op_desc = inputs.itemById("op_desc")
+    if op_desc:
+        if operation == "cavity":
+            op_desc.text = "<i>适用场景：为零件制作专属的安装底座，或快速打印公差配合测试件。</i>"
+        elif operation == "tool":
+            op_desc.text = "<i>适用场景：将其作为“刻刀”，在您设计的复杂外壳上，使用布尔运算精准挖出安装孔。</i>"
+        elif operation == "part":
+            op_desc.text = "<i>适用场景：直接 3D 打印该零件时，预先抵消塑料热收缩误差，确保打印成品能顺利装配。</i>"
+        else:
+            op_desc.text = ""
 
     center_input = inputs.itemById("center")
     if center_input and changed_id == "fit" and fit != "thread":
-        _select_dropdown_label(center_input, "自动：包围盒中心")
+        _select_dropdown_label(center_input, "自动：包围盒中心 (适合对称体)")
     elif center_input and changed_id == "fit":
-        _select_dropdown_label(center_input, "原点：适合螺纹轴心在原点")
+        _select_dropdown_label(center_input, "智能：基于点选圆提取 (推荐)")
 
     blank_input = inputs.itemById("blank")
     if blank_input and operation == "tool":
@@ -361,45 +574,44 @@ def _optional_positive_mm(inputs, input_id):
     return "" if abs(value) < 1e-9 else ("%g" % value)
 
 
-def _config_text_from_inputs(inputs):
+def _config_dict_from_inputs(inputs):
     operation = _selected_value(inputs.itemById("operation"), OPERATION_OPTIONS)
     fit = _selected_value(inputs.itemById("fit"), FIT_OPTIONS)
     blank = _selected_value(inputs.itemById("blank"), BLANK_OPTIONS)
     center = _selected_value(inputs.itemById("center"), CENTER_OPTIONS)
-    seal = _selected_value(inputs.itemById("seal"), {"不封头": "none", "圆柱封头": "cylinder"})
-    seal_direction = _selected_value(inputs.itemById("seal_direction"), {"+Z": "+z", "-Z": "-z"})
+    seal_enable_input = inputs.itemById("seal_enable")
+    seal = "cylinder" if (seal_enable_input and seal_enable_input.value) else "none"
 
-    parts = [
-        "operation=%s" % operation,
-        "fit=%s" % fit,
-        "preset=%s" % _selected_value(inputs.itemById("preset"), {name: name for name in PRESET_OPTIONS}),
-        "diameter=%g" % _mm_value(inputs.itemById("diameter")),
-        "clearance=%g" % _mm_value(inputs.itemById("clearance")),
-        "clearance_x=%g" % _mm_value(inputs.itemById("clearance_x")),
-        "clearance_y=%g" % _mm_value(inputs.itemById("clearance_y")),
-        "clearance_z=%g" % _mm_value(inputs.itemById("clearance_z")),
-        "fit_adjust=%g" % _mm_value(inputs.itemById("fit_adjust")),
-        "blank=%s" % blank,
-        "center=%s" % center,
-        "margin=%g" % _mm_value(inputs.itemById("margin")),
-        "cut=%s" % str(bool(inputs.itemById("cut").value)).lower(),
-        "keep_tool=%s" % str(bool(inputs.itemById("keep_tool").value)).lower(),
-        "seal=%s" % seal,
-        "seal_depth=%g" % _mm_value(inputs.itemById("seal_depth")),
-        "seal_direction=%s" % seal_direction,
-    ]
+    params = {
+        "operation": operation,
+        "fit": fit,
+        "preset": _selected_value(inputs.itemById("preset"), {name: name for name in PRESET_OPTIONS}),
+        "diameter": str(_mm_value(inputs.itemById("diameter"))),
+        "clearance": str(_mm_value(inputs.itemById("clearance"))),
+        "clearance_x": str(_mm_value(inputs.itemById("clearance_x"))),
+        "clearance_y": str(_mm_value(inputs.itemById("clearance_y"))),
+        "clearance_z": str(_mm_value(inputs.itemById("clearance_z"))),
+        "fit_adjust": str(_mm_value(inputs.itemById("fit_adjust"))),
+        "blank": blank,
+        "center": center,
+        "margin": str(_mm_value(inputs.itemById("margin"))),
+        "cut": str(bool(inputs.itemById("cut").value)).lower(),
+        "keep_tool": str(bool(inputs.itemById("keep_tool").value)).lower(),
+        "seal": seal,
+        "seal_length": str(_mm_value(inputs.itemById("seal_length"))) if inputs.itemById("seal_length") else "2.0",
+    }
 
     for input_id, key in (("outer", "outer"), ("box_x", "box_x"), ("box_y", "box_y"), ("thickness", "thickness"), ("z_start", "z_start")):
         value = _optional_positive_mm(inputs, input_id) if input_id in {"outer", "box_x", "box_y", "thickness"} else "%g" % _mm_value(inputs.itemById(input_id))
         if value != "":
-            parts.append("%s=%s" % (key, value))
+            params[key] = value
 
     for input_id, key in (("scale_x", "scale_x"), ("scale_y", "scale_y"), ("scale_z", "scale_z")):
         value = inputs.itemById(input_id).value.strip()
         if value:
-            parts.append("%s=%s" % (key, value))
+            params[key] = value
 
-    return "; ".join(parts)
+    return params
 
 
 def _bodies_from_selection_input(selection_input):
@@ -439,18 +651,151 @@ def create_thread_companion(root, screw_body, config: AdapterConfig):
     return create_print_fit_adapter(root, [screw_body], config)
 
 
-def create_print_fit_adapter(root, source_bodies, config: AdapterConfig):
+def _find_smart_center_from_bodies(bodies):
+    best_origin = None
+    max_radius = -1.0
+    face_count = 0
+    edge_count = 0
+    for body in bodies:
+        for face in body.faces:
+            face_count += 1
+            if face_count > 2000:
+                break
+            geom = face.geometry
+            if geom.objectType == adsk.core.Cylinder.classType():
+                if abs(geom.axis.z) > 0.99:
+                    if geom.radius > max_radius:
+                        max_radius = geom.radius
+                        best_origin = geom.origin
+        for edge in body.edges:
+            edge_count += 1
+            if edge_count > 3000:
+                break
+            geom = edge.geometry
+            if geom.objectType in (adsk.core.Circle3D.classType(), adsk.core.Arc3D.classType()):
+                if abs(geom.normal.z) > 0.99:
+                    if geom.radius > max_radius:
+                        max_radius = geom.radius
+                        best_origin = geom.center
+    return best_origin
+
+
+def create_print_fit_adapter(root, source_bodies, config: AdapterConfig, top_entity=None, bottom_entity=None, center_entity=None, seal_entity=None, is_preview=False, progress=None):
     source_bodies = list(source_bodies)
     if not source_bodies:
         raise RuntimeError("没有可处理的实体。")
+        
+    seal_z_cm = None
+    if seal_entity:
+        if hasattr(seal_entity, 'geometry') and hasattr(seal_entity.geometry, 'origin'):
+            seal_z_cm = seal_entity.geometry.origin.z
+        elif hasattr(seal_entity, 'pointOnFace'):
+            seal_z_cm = seal_entity.pointOnFace.z
+        elif hasattr(seal_entity, 'center'):
+            seal_z_cm = seal_entity.center.z
+        elif hasattr(seal_entity, 'boundingBox'):
+            seal_z_cm = seal_entity.boundingBox.minPoint.z
+            
+    if config.seal == "cylinder" and seal_z_cm is None:
+        raise RuntimeError("开启封头时，必须选择一个【封头起点面】。请点选需要填平的坑底面或螺丝顶面。")
 
     safe_name = _safe_name(config.name)
     source_box = _union_bounding_box(source_bodies)
     source_size = _box_size_mm(source_box)
     scales = calculate_fit_scales(config, source_size)
+    
+    design = adsk.fusion.Design.cast(root.parentDesign)
+    scale_exprs = None
+    if design and config.fit != "manual" and not is_preview:
+        base_prefix = "PF_" + safe_name.replace("-", "_").replace(" ", "_")
+        user_params = design.userParameters
+        
+        safe_prefix = base_prefix
+        idx = 1
+        while user_params.itemByName(f"{safe_prefix}_Clear") or user_params.itemByName(f"{safe_prefix}_Dia") or user_params.itemByName(f"{safe_prefix}_Clear_X"):
+            safe_prefix = f"{base_prefix}_{idx}"
+            idx += 1
+        
+        def _get_or_create(name, expr, units):
+            param = user_params.itemByName(name)
+            if param:
+                param.expression = expr
+            else:
+                param = user_params.add(name, adsk.core.ValueInput.createByString(expr), units, "Print-Fit Adapter")
+            return param
+
+        if config.fit == "universal":
+            _get_or_create(f"{safe_prefix}_Clear", f"{config.clearance_mm} mm", "mm")
+            offset_expr = f"{safe_prefix}_Clear"
+        elif config.fit == "thread_xy":
+            _get_or_create(f"{safe_prefix}_Dia", f"{config.nominal_diameter_mm} mm", "mm")
+            _get_or_create(f"{safe_prefix}_Clear", f"{config.clearance_mm} mm", "mm")
+            expr_xy = f"({safe_prefix}_Dia + 2 * {safe_prefix}_Clear) / {safe_prefix}_Dia"
+            scale_exprs = (expr_xy, expr_xy, "1.0")
+        else:
+            _get_or_create(f"{safe_prefix}_SizeX", f"{source_size[0]} mm", "mm")
+            _get_or_create(f"{safe_prefix}_ClearX", f"{config.clearance_x_mm} mm", "mm")
+            _get_or_create(f"{safe_prefix}_SizeY", f"{source_size[1]} mm", "mm")
+            _get_or_create(f"{safe_prefix}_ClearY", f"{config.clearance_y_mm} mm", "mm")
+            expr_x = f"({safe_prefix}_SizeX + 2 * {safe_prefix}_ClearX) / {safe_prefix}_SizeX"
+            expr_y = f"({safe_prefix}_SizeY + 2 * {safe_prefix}_ClearY) / {safe_prefix}_SizeY"
+            if config.fit == "xyz":
+                _get_or_create(f"{safe_prefix}_SizeZ", f"{source_size[2]} mm", "mm")
+                _get_or_create(f"{safe_prefix}_ClearZ", f"{config.clearance_z_mm} mm", "mm")
+                expr_z = f"({safe_prefix}_SizeZ + 2 * {safe_prefix}_ClearZ) / {safe_prefix}_SizeZ"
+            else:
+                expr_z = "1.0"
+    else:
+        scale_exprs = None
+        if config.fit == "universal":
+            offset_expr = f"{config.clearance_mm} mm"
+        elif config.fit == "thread_xy":
+            scale_exprs = (f"{scales[0]}", f"{scales[1]}", "1.0")
+        elif config.fit == "xyz":
+            scale_exprs = (f"{scales[0]}", f"{scales[1]}", f"{scales[2]}")
+        elif config.fit == "xy":
+            scale_exprs = (f"{scales[0]}", f"{scales[1]}", "1.0")
+        else:
+            scale_exprs = None
+
     center_point = root.originConstructionPoint
     if config.center == "bbox":
         center_point = _create_scale_point(root, _box_center(source_box), "%s scale center" % safe_name)
+    elif config.center == "smart":
+        if center_entity is not None:
+            if center_entity.objectType == adsk.fusion.BRepVertex.classType():
+                center_point = center_entity
+            elif center_entity.objectType == adsk.fusion.SketchPoint.classType():
+                center_point = center_entity
+            elif center_entity.objectType == adsk.fusion.ConstructionPoint.classType():
+                center_point = center_entity
+            elif center_entity.objectType in (adsk.fusion.BRepFace.classType(), adsk.fusion.BRepEdge.classType(), "adsk::fusion::BRepFaceProxy", "adsk::fusion::BRepEdgeProxy"):
+                # Extract Point3D robustly instead of using setByCenter which can fail
+                geom = center_entity.geometry
+                pt = None
+                if center_entity.objectType in (adsk.fusion.BRepEdge.classType(), "adsk::fusion::BRepEdgeProxy") and geom.objectType in (adsk.core.Circle3D.classType(), adsk.core.Arc3D.classType()):
+                    pt = geom.center
+                elif center_entity.objectType in (adsk.fusion.BRepFace.classType(), "adsk::fusion::BRepFaceProxy") and geom.objectType == adsk.core.Cylinder.classType():
+                    pt = geom.origin
+                
+                if pt is not None:
+                    # Keep Z coordinate of the original center box, but use XY from the selected entity
+                    center_box = _box_center(source_box)
+                    smart_pt = adsk.core.Point3D.create(pt.x, pt.y, center_box.z)
+                    center_point = _create_scale_point(root, smart_pt, "%s param center" % safe_name)
+                else:
+                    center_point = _create_scale_point(root, _box_center(source_box), "%s fallback center" % safe_name)
+        elif config.center_point is not None:
+            smart_pt = adsk.core.Point3D.create(mm_to_cm(config.center_point[0]), mm_to_cm(config.center_point[1]), mm_to_cm(config.center_point[2]))
+            center_point = _create_scale_point(root, smart_pt, "%s smart center" % safe_name)
+        else:
+            smart_origin = _find_smart_center_from_bodies(source_bodies)
+            if smart_origin is not None:
+                center_box = _box_center(source_box)
+                smart_pt = adsk.core.Point3D.create(smart_origin.x, smart_origin.y, center_box.z)
+                center_point = _create_scale_point(root, smart_pt, "%s smart auto center" % safe_name)
+            else:
+                center_point = _create_scale_point(root, _box_center(source_box), "%s fallback center" % safe_name)
 
     result = {
         "source_count": len(source_bodies),
@@ -468,35 +813,101 @@ def create_print_fit_adapter(root, source_bodies, config: AdapterConfig):
     if config.operation == "part":
         for index, body in enumerate(working_bodies, start=1):
             body.name = "%s_print_adjusted_%02d" % (safe_name, index)
-        _scale_bodies(root, working_bodies, center_point, scales, "Print compensation scale")
+            
+        if config.fit == "universal":
+            total_faces = sum(b.faces.count for b in working_bodies if b and b.isValid)
+            if is_preview and total_faces > 50:
+                _scale_bodies(root, working_bodies, center_point, scales, "Print compensation scale (preview fallback)", scale_exprs)
+            else:
+                if progress:
+                    progress.message = f"正在进行真实面偏移计算 ({total_faces} 个曲面)，极耗时请耐心等待..."
+                    adsk.doEvents()
+                try:
+                    feature, offset_bodies = _offset_body_faces(root, working_bodies, offset_expr, "Print compensation offset")
+                    for body in working_bodies:
+                        try:
+                            body.deleteMe()
+                        except:
+                            body.isLightBulbOn = False
+                    working_bodies = offset_bodies
+                except Exception as e:
+                    print("Offset failed, fallback to scale: %s" % e)
+                    _scale_bodies(root, working_bodies, center_point, scales, "Print compensation scale (fallback)", scale_exprs)
+        else:
+            _scale_bodies(root, working_bodies, center_point, scales, "Print compensation scale", scale_exprs)
+            
         result["part_names"] = [body.name for body in working_bodies if body and body.isValid]
         return result
 
     for index, body in enumerate(working_bodies, start=1):
         body.name = "%s_clearance_cutter_DO_NOT_PRINT_%02d" % (safe_name, index)
-    _scale_bodies(root, working_bodies, center_point, scales, "Print-fit cutter scale")
+        
+    if config.fit == "universal":
+        total_faces = sum(b.faces.count for b in working_bodies if b and b.isValid)
+        if is_preview and total_faces > 50:
+            _scale_bodies(root, working_bodies, center_point, scales, "Print-fit cutter scale (preview fallback)", scale_exprs)
+        else:
+            if progress:
+                progress.message = f"正在进行真实面偏移计算 ({total_faces} 个曲面)，极耗时请耐心等待..."
+                adsk.doEvents()
+            try:
+                feature, offset_bodies = _offset_body_faces(root, working_bodies, offset_expr, "Print-fit cutter offset")
+                for body in working_bodies:
+                    try:
+                        body.deleteMe()
+                    except:
+                        body.isLightBulbOn = False
+                working_bodies = offset_bodies
+                for index, body in enumerate(working_bodies, start=1):
+                    body.name = "%s_clearance_cutter_DO_NOT_PRINT_%02d" % (safe_name, index)
+            except Exception as e:
+                print("Offset failed, fallback to scale: %s" % e)
+                _scale_bodies(root, working_bodies, center_point, scales, "Print-fit cutter scale (fallback)", scale_exprs)
+    else:
+        _scale_bodies(root, working_bodies, center_point, scales, "Print-fit cutter scale", scale_exprs)
 
     tool_bodies = list(working_bodies)
     tool_box = _union_bounding_box(tool_bodies)
 
-    if config.seal == "cylinder" and config.seal_depth_mm > 0:
-        cap_body = _create_cylindrical_seal_cap(root, tool_box, config)
-        tool_bodies.append(cap_body)
-        result["cap_created"] = True
+    if config.seal == "cylinder":
+        cap_body = _create_cylindrical_seal_cap(root, tool_box, center_point, seal_z_cm, config)
+        if cap_body and cap_body.isValid:
+            if len(tool_bodies) > 0:
+                tools = adsk.core.ObjectCollection.create()
+                tools.add(cap_body)
+                combine_input = root.features.combineFeatures.createInput(tool_bodies[0], tools)
+                combine_input.operation = adsk.fusion.FeatureOperations.JoinFeatureOperation
+                combine_input.isKeepToolBodies = False
+                combine_input.isNewComponent = False
+                try:
+                    combine_feature = root.features.combineFeatures.add(combine_input)
+                    if not combine_feature.bodies.count > 0:
+                        tool_bodies.append(cap_body)
+                except:
+                    tool_bodies.append(cap_body)
+            else:
+                tool_bodies.append(cap_body)
+            result["cap_created"] = True
 
     result["tool_names"] = [body.name for body in tool_bodies if body and body.isValid]
 
     blank_body = None
     if config.blank != "none":
-        blank_body = _create_blank(root, config, _union_bounding_box(tool_bodies))
+        blank_body = _create_blank(root, config, _union_bounding_box(tool_bodies), safe_name, top_entity, bottom_entity)
         blank_body.name = "%s_%s_blank" % (safe_name, config.blank)
         result["blank_name"] = blank_body.name
 
     if config.operation == "cavity" and config.cut and blank_body:
-        combine_feature = _cut_blank_with_tools(root, blank_body, tool_bodies, config.keep_tool)
-        blank_body.name = "%s_print_fit_%s" % (safe_name, config.blank)
-        result["blank_name"] = blank_body.name
-        result["combine_feature"] = combine_feature.name if combine_feature else ""
+        tool_faces = sum(b.faces.count for b in tool_bodies if b and b.isValid)
+        if is_preview and tool_faces > 200:
+            blank_body.opacity = 0.3
+            blank_body.name = "%s_print_fit_%s (Preview)" % (safe_name, config.blank)
+            result["blank_name"] = blank_body.name
+        else:
+            combine_feature = _cut_blank_with_tools(root, blank_body, tool_bodies, config.keep_tool)
+            blank_body.name = "%s_print_fit_%s" % (safe_name, config.blank)
+            result["blank_name"] = blank_body.name
+            result["combine_feature"] = combine_feature.name if combine_feature else ""
 
     return result
 
@@ -537,7 +948,31 @@ def _copy_bodies_to_root(root, bodies):
     return copies
 
 
-def _scale_bodies(root, bodies, scale_point, scales, feature_name):
+def _offset_body_faces(root, bodies, offset_expr_str, feature_name):
+    faces = adsk.core.ObjectCollection.create()
+    for body in bodies:
+        for face in body.faces:
+            faces.add(face)
+            
+    offset_features = root.features.offsetFeatures
+    offset_input = offset_features.createInput(
+        faces,
+        adsk.core.ValueInput.createByString(offset_expr_str),
+        adsk.fusion.FeatureOperations.NewBodyFeatureOperation
+    )
+    feature = offset_features.add(offset_input)
+    if not feature or feature.bodies.count < len(bodies):
+        raise RuntimeError("面偏移计算失败。")
+        
+    new_bodies = []
+    for i in range(feature.bodies.count):
+        new_bodies.append(feature.bodies.item(i))
+        
+    feature.name = feature_name
+    return feature, new_bodies
+
+
+def _scale_bodies(root, bodies, scale_point, scales, feature_name, scale_exprs=None):
     collection = adsk.core.ObjectCollection.create()
     for body in bodies:
         collection.add(body)
@@ -548,11 +983,18 @@ def _scale_bodies(root, bodies, scale_point, scales, feature_name):
         scale_point,
         adsk.core.ValueInput.createByReal(1.0),
     )
-    ok = scale_input.setToNonUniform(
-        adsk.core.ValueInput.createByReal(scales[0]),
-        adsk.core.ValueInput.createByReal(scales[1]),
-        adsk.core.ValueInput.createByReal(scales[2]),
-    )
+    if scale_exprs:
+        ok = scale_input.setToNonUniform(
+            adsk.core.ValueInput.createByString(scale_exprs[0]),
+            adsk.core.ValueInput.createByString(scale_exprs[1]),
+            adsk.core.ValueInput.createByString(scale_exprs[2]),
+        )
+    else:
+        ok = scale_input.setToNonUniform(
+            adsk.core.ValueInput.createByReal(scales[0]),
+            adsk.core.ValueInput.createByReal(scales[1]),
+            adsk.core.ValueInput.createByReal(scales[2]),
+        )
     if not ok:
         raise RuntimeError("设置非均匀缩放失败。")
     feature = scale_features.add(scale_input)
@@ -584,19 +1026,24 @@ def _create_scale_point(root, point, name: str):
     return point_on_sketch
 
 
-def _create_blank(root, config: AdapterConfig, tool_box):
+def _create_blank(root, config: AdapterConfig, tool_box, safe_name, top_entity=None, bottom_entity=None):
     min_x, min_y, min_z, max_x, max_y, max_z = _box_values_mm(tool_box)
     size_x, size_y, size_z = _box_size_mm(tool_box)
     center_x_cm = (tool_box.minPoint.x + tool_box.maxPoint.x) / 2.0
     center_y_cm = (tool_box.minPoint.y + tool_box.maxPoint.y) / 2.0
 
-    z_start_mm = config.z_start_mm if config.z_start_mm is not None else min_z - config.margin_z_mm
-    thickness_mm = config.thickness_mm if config.thickness_mm is not None else size_z + 2.0 * config.margin_z_mm
-    if thickness_mm <= 0:
-        raise RuntimeError("毛坯厚度必须大于 0。")
+    design = adsk.fusion.Design.cast(root.parentDesign)
+    safe_prefix = "PF_" + safe_name.replace("-", "_").replace(" ", "_")
+    user_params = design.userParameters
+    def _get_or_create(name, expr, units):
+        param = user_params.itemByName(name)
+        if param:
+            param.expression = expr
+        else:
+            param = user_params.add(name, adsk.core.ValueInput.createByString(expr), units, "Print-Fit Adapter")
+        return param
 
-    plane = _create_offset_xy_plane(root, z_start_mm, "%s blank start plane" % config.name)
-    sketch = root.sketches.add(plane)
+    sketch = root.sketches.add(root.xYConstructionPlane)
     sketch.name = "%s blank sketch" % config.name
 
     if config.blank == "hex":
@@ -619,13 +1066,31 @@ def _create_blank(root, config: AdapterConfig, tool_box):
     if sketch.profiles.count < 1:
         raise RuntimeError("毛坯草图没有形成封闭轮廓。")
 
-    extrude = root.features.extrudeFeatures.addSimple(
-        sketch.profiles.item(0),
-        adsk.core.ValueInput.createByString("%g mm" % thickness_mm),
-        adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
-    )
+    extrude_input = root.features.extrudeFeatures.createInput(sketch.profiles.item(0), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    
+    if bottom_entity:
+        start_def = adsk.fusion.FromEntityStartDefinition.create(bottom_entity, adsk.core.ValueInput.createByReal(0))
+        extrude_input.startExtent = start_def
+    else:
+        z_start_mm = config.z_start_mm if config.z_start_mm is not None else min_z - config.margin_z_mm
+        _get_or_create(f"{safe_prefix}_Blank_Z", f"{z_start_mm} mm", "mm")
+        offset_val = adsk.core.ValueInput.createByString(f"{safe_prefix}_Blank_Z")
+        start_def = adsk.fusion.OffsetStartDefinition.create(offset_val)
+        extrude_input.startExtent = start_def
+
+    if top_entity:
+        extent_def = adsk.fusion.ToEntityExtentDefinition.create(top_entity, False)
+        extrude_input.setOneSideExtent(extent_def, adsk.fusion.ExtentDirections.PositiveExtentDirection)
+    else:
+        thickness_mm = config.thickness_mm if config.thickness_mm is not None else size_z + 2.0 * config.margin_z_mm
+        if thickness_mm <= 0:
+            raise RuntimeError("毛坯厚度必须大于 0。")
+        _get_or_create(f"{safe_prefix}_Blank_Thick", f"{thickness_mm} mm", "mm")
+        extent_def = adsk.fusion.DistanceExtentDefinition.create(adsk.core.ValueInput.createByString(f"{safe_prefix}_Blank_Thick"))
+        extrude_input.setOneSideExtent(extent_def, adsk.fusion.ExtentDirections.PositiveExtentDirection)
+
+    extrude = root.features.extrudeFeatures.add(extrude_input)
     sketch.isVisible = False
-    plane.isLightBulbOn = False
     if not extrude or extrude.bodies.count < 1:
         raise RuntimeError("毛坯拉伸失败。")
     return extrude.bodies.item(0)
@@ -661,21 +1126,43 @@ def _draw_regular_polygon(sketch, center_x_cm, center_y_cm, sides: int, radius_c
         lines.addByTwoPoints(points[index], points[(index + 1) % sides])
 
 
-def _create_cylindrical_seal_cap(root, tool_box, config: AdapterConfig):
+def _create_cylindrical_seal_cap(root, tool_box, center_point, seal_z_cm, config: AdapterConfig):
     min_x, min_y, min_z, max_x, max_y, max_z = _box_values_mm(tool_box)
-    center_x_cm = (tool_box.minPoint.x + tool_box.maxPoint.x) / 2.0
-    center_y_cm = (tool_box.minPoint.y + tool_box.maxPoint.y) / 2.0
+    
+    if hasattr(center_point, 'geometry'):
+        geom = center_point.geometry
+        center_x_cm = geom.x
+        center_y_cm = geom.y
+    elif hasattr(center_point, 'x'):
+        center_x_cm = center_point.x
+        center_y_cm = center_point.y
+    else:
+        center_x_cm = (tool_box.minPoint.x + tool_box.maxPoint.x) / 2.0
+        center_y_cm = (tool_box.minPoint.y + tool_box.maxPoint.y) / 2.0
+
     half_x_cm = (tool_box.maxPoint.x - tool_box.minPoint.x) / 2.0
     half_y_cm = (tool_box.maxPoint.y - tool_box.minPoint.y) / 2.0
     radius_cm = max(half_x_cm, half_y_cm) * config.seal_oversize
     extra_mm = 0.05
 
-    if config.seal_direction == "+z":
-        start_z_mm = max_z - config.seal_depth_mm
-        distance_mm = config.seal_depth_mm + extra_mm
+    start_z_mm = seal_z_cm * 10.0
+    
+    # 智能判断螺丝朝向 (离 max_z 近还是离 min_z 近)
+    dist_to_max = abs(max_z - start_z_mm)
+    dist_to_min = abs(start_z_mm - min_z)
+    
+    if dist_to_max < dist_to_min:
+        # 螺丝头朝上 (+Z方向突破)
+        distance_mm = max_z - start_z_mm + config.seal_length_mm + extra_mm
+        if distance_mm < 1.0: distance_mm = 1.0
+        extrude_dist = distance_mm
     else:
-        start_z_mm = min_z - extra_mm
-        distance_mm = config.seal_depth_mm + extra_mm
+        # 螺丝头朝下 (-Z方向突破)
+        distance_mm = start_z_mm - min_z + config.seal_length_mm + extra_mm
+        if distance_mm < 1.0: distance_mm = 1.0
+        # 对于向下突破，偏移平面设为 min_z - seal_length，然后往 +Z 拉伸到 start_z_mm
+        extrude_dist = distance_mm
+        start_z_mm = start_z_mm - distance_mm
 
     plane = _create_offset_xy_plane(root, start_z_mm, "%s seal cap plane" % config.name)
     sketch = root.sketches.add(plane)
@@ -687,7 +1174,7 @@ def _create_cylindrical_seal_cap(root, tool_box, config: AdapterConfig):
 
     extrude = root.features.extrudeFeatures.addSimple(
         sketch.profiles.item(0),
-        adsk.core.ValueInput.createByString("%g mm" % distance_mm),
+        adsk.core.ValueInput.createByString("%g mm" % extrude_dist),
         adsk.fusion.FeatureOperations.NewBodyFeatureOperation,
     )
     sketch.isVisible = False
@@ -802,4 +1289,5 @@ def _safe_name(value: str) -> str:
             safe.append(char)
         else:
             safe.append("_")
-    return "".join(safe).strip("_") or "PrintFit"
+    # Truncate to 20 characters to prevent Fusion 360 user parameter name length limit crashes
+    return "".join(safe)[:20].strip("_") or "PrintFit"
