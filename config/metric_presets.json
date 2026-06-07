@@ -1,0 +1,19 @@
+{
+  "notes": [
+    "These are practical print-fit defaults, not a replacement for ISO tolerance classes.",
+    "The Fusion script uses the selected body geometry as the actual cutter source; pitch values are included for thread reference and naming only.",
+    "outer means hex across-flats for hex blanks and diameter for cylindrical blanks.",
+    "Generic standard parts use fit=xy or fit=xyz with body bounding-box scaling."
+  ],
+  "default_clearance_mm": 0.2,
+  "presets": {
+    "M2": { "nominal_diameter_mm": 2.0, "coarse_pitch_mm": 0.4, "outer_mm": 4.0, "thickness_mm": 2.4 },
+    "M2.5": { "nominal_diameter_mm": 2.5, "coarse_pitch_mm": 0.45, "outer_mm": 5.0, "thickness_mm": 3.0 },
+    "M3": { "nominal_diameter_mm": 3.0, "coarse_pitch_mm": 0.5, "outer_mm": 6.0, "thickness_mm": 3.6 },
+    "M4": { "nominal_diameter_mm": 4.0, "coarse_pitch_mm": 0.7, "outer_mm": 8.0, "thickness_mm": 4.8 },
+    "M5": { "nominal_diameter_mm": 5.0, "coarse_pitch_mm": 0.8, "outer_mm": 10.0, "thickness_mm": 6.0 },
+    "M6": { "nominal_diameter_mm": 6.0, "coarse_pitch_mm": 1.0, "outer_mm": 12.0, "thickness_mm": 7.2 },
+    "M8": { "nominal_diameter_mm": 8.0, "coarse_pitch_mm": 1.25, "outer_mm": 16.0, "thickness_mm": 9.6 },
+    "M10": { "nominal_diameter_mm": 10.0, "coarse_pitch_mm": 1.5, "outer_mm": 20.0, "thickness_mm": 12.0 }
+  }
+}
