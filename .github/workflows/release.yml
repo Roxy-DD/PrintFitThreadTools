@@ -1,0 +1,36 @@
+name: Release PrintFitThreadTools
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Get the version
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+    - name: Create Zip Archive
+      run: |
+        mkdir -p release_build/PrintFitThreadTools
+        # 复制所需文件到打包目录
+        cp -r fusion/PrintFitThreadTools/* release_build/PrintFitThreadTools/
+        # 进入构建目录并压缩
+        cd release_build
+        zip -r PrintFitThreadTools_${{ env.VERSION }}.zip PrintFitThreadTools/
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release_build/PrintFitThreadTools_${{ env.VERSION }}.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
