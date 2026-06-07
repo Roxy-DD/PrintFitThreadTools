@@ -51,6 +51,152 @@ CMD_DESCRIPTION = "为 McMaster/Fusion 标准件生成带打印公差的刀具�
 WORKSPACE_ID = "FusionSolidEnvironment"
 PANEL_CANDIDATES = ("SolidCreatePanel", "SolidScriptsAddinsPanel")
 
+_LANG_DICT = {
+    "3D打印标准件适配": "3D Print Fit Adapter",
+    "为 McMaster/Fusion 标准件生成带打印公差的刀具、底座或补偿副本。": "Generate print-fit cutters, bases, cavities, or adjusted copies from standard parts.",
+    "生成配套底座/孔槽": "Generate Base / Cavity",
+    "只生成布尔刀具": "Generate Boolean Cutter Only",
+    "生成打印补偿副本": "Generate Print-Adjusted Part",
+    "径向缩放 (仅 XY 方向, 需零件直立)": "Radial Scale (XY only, part upright)",
+    "等比缩放 (XYZ 方向)": "Uniform Scale (XYZ)",
+    "真实面偏移 (法向等距)": "Normal Offset (Precise & slow)",
+    "手动指定比例": "Manual Scale",
+    "宽松插入 (+0.20mm)": "Loose Fit (+0.20mm)",
+    "普通配合 (+0.10mm)": "Normal Fit (+0.10mm)",
+    "精准/滑动 (+0.05mm)": "Tight / Sliding (+0.05mm)",
+    "无公差 (0.00mm)": "No Clearance (0.00mm)",
+    "过盈/热熔 (-0.15mm)": "Interference / Heat-set (-0.15mm)",
+    "自定义": "Custom",
+    "矩形底座": "Rectangular Base",
+    "圆形底座": "Cylindrical Base",
+    "六角螺母": "Hex Nut Base",
+    "不生成底座": "No Base",
+    "智能：基于点选圆提取 (推荐)": "Smart: Extract from Circle (Rec.)",
+    "自动：包围盒中心 (适合对称体)": "Auto: Bounding Box Center",
+    "原点：全局坐标系原点": "Origin: Global Origin",
+    "<b>3D 打印标准件适配</b><br/>选择实体，设置公差和底座形状，然后自动生成配套底座、布尔刀具或打印补偿副本。": "<b>3D Print Fit Adapter</b><br/>Select bodies, set clearance and base shape, then automatically generate matching bases, boolean cutters, or compensated print copies.",
+    "操作实体": "Source Bodies",
+    "选择一个或多个实体 Body": "Select one or more solid bodies",
+    "零件与公差": "Part & Clearance",
+    "底座边界": "Base Bounds",
+    "专家模式": "Expert Mode",
+    "操作类型": "Operation Type",
+    "选择要生成的结果类型": "Select the result type to generate",
+    "【配套底座/孔槽】：直接在外围生成带公差的孔槽底座。适用场景：为零件制作专属的安装底座，或快速打印公差配合测试件。\n【生成刀具体】：提取放大后的零件本体（不含底座）。适用场景：将其作为“刻刀”，在您设计的复杂机械外壳上，使用布尔运算精准挖出安装孔。\n【打印补偿副本】：对原零件本身进行尺寸补偿。适用场景：直接 3D 打印该零件时，预先抵消塑料热收缩误差（如缩小0.15mm），确保打印成品能顺利装配。": "[Generate Base / Cavity]: Make dedicated bases or quick test fits.\n[Generate Boolean Cutter]: Use as a boolean tool to cut precise holes in enclosures.\n[Generate Print-Adjusted Part]: Offset 3D printing shrinkage directly on the part.",
+    "适配策略": "Fit Strategy",
+    "选择间隙生成的计算底层原理": "Choose the underlying calculation for clearance",
+    "【径向缩放 (仅 XY 方向, 需零件直立)】：底部Z轴保持不变，专为螺丝/螺纹设计，保护螺距不被破坏。注意：必须确保零件在绝对坐标系中竖直向上放置 (Z-up)，否则由于 Fusion 360 缩放轴向限制，会导致变形！\n【等比缩放 (XYZ 方向)】：全方向均匀放大，速度极快，适合大部分对称零件。\n【真实面偏移】：沿法线严格推覆，极其精准但面数多时极其耗时。": "[Radial Scale (XY only)]: Z-axis remains unchanged, designed for threads to protect pitch. NOTE: part must be vertical (Z-up)!\n[Uniform Scale (XYZ)]: Quick uniform scaling.\n[Normal Offset]: Strict surface pushing along normal. Precise but slow.",
+    "螺纹规格": "Thread Spec",
+    "快速选择标准件的外径尺寸": "Quickly select outer diameter for standard parts",
+    "圆柱参考/定心点 (可选)": "Cylinder Ref / Center (Optional)",
+    "选择圆柱面/圆边提取直径和圆心。或者单独选择一个顶点/草图点来强制指定圆心（此时需手动输入直径）。": "Select a cylindrical face or edge to extract diameter and center. Or select a point/vertex to force a center.",
+    "智能提取圆心与直径": "Smart Extract Center & Diameter",
+    "如果您不知道模型直径，请点选屏幕上的圆环边缘或圆柱面，系统会自动提取其真实的直径并填入下方，同时全参数化绑定该几何中心。\n如果您只想自定义缩放中心而不修改直径，请直接选择屏幕上的某个点（顶点、草图点等）。": "Select a circular edge or cylindrical face to extract diameter and parametrically bind the center.\nIf you just want to set the center, click a point.",
+    "自定义直径": "Custom Diameter",
+    "公差预设": "Clearance Preset",
+    "快速设置常见的 3D 打印公差": "Quick settings for common 3D printing tolerances",
+    "宽松插入：适合需要顺滑插入、经常拔插的零件。\n精准/滑动：适合要求严丝合缝的卡扣或滑动件。\n过盈/热熔：用于强行压入或用电烙铁加热植入铜花母（热熔嵌件）。": "Loose Fit: For smooth, frequent insertion.\nTight/Sliding: For precise snaps or sliders.\nInterference/Heat-set: For forced press-fits or heat-set inserts.",
+    "单边公差": "Radial Clearance",
+    "零件四周预留的装配空隙": "Assembly gap left around the part",
+    "通常 3D 打印推荐设置在 0.15mm - 0.25mm 之间。此数值将生成为全局参数，可随时修改。": "Typically recommended between 0.15mm - 0.25mm for 3D printing. Generated as a global parameter.",
+    "开启封头 (填平坑洞并突破)": "Enable Cap (Fill holes & punch)",
+    "将坑洞完全填平为实心，并可向外延伸": "Fills holes to make a solid cap, and can extend outwards",
+    "勾选后，插件会自动填满您选择的平面或坑底，并可以往外挤出一段距离，形成一个无缝的完美打孔刀具。": "Check to automatically fill the selected face/pit and extrude outwards, creating a seamless hole-punch tool.",
+    "封头起点面 (必选)": "Cap Start Face (Required)",
+    "请点选螺丝顶面或内六角坑的底面。插件将从该高度开始填平并向外突破。": "Select the screw top face or the bottom of the hex socket. The add-in will fill from here and extend out.",
+    "向外突破长度": "Punch-through Length",
+    "封头高出螺丝顶部的额外贯穿距离": "Extra protrusion distance past the screw top",
+    "确保刀具有足够的长度刺穿外壳。如果您只想要填平坑洞而不冒出头，可以设为 0 mm。": "Ensures the cutter is long enough to pierce the shell. Set to 0 if you only want to fill the hole.",
+    "底座/毛坯设置": "Base / Blank Settings",
+    "底座生成方式": "Base Generation Mode",
+    "底面参考 (可选)": "Bottom Ref (Optional)",
+    "选择模型表面、顶点作为底座底面": "Select a face or vertex as the base bottom",
+    "拉伸底座的起始边界": "Starting boundary for base extrusion",
+    "点击模型表面或顶点，底座将以此为起点。\n如果不选，系统将自动使用包围盒计算。": "Click a face/vertex to start the base from there.\nIf empty, bounding box is used.",
+    "顶面参考 (可选)": "Top Ref (Optional)",
+    "选择模型表面、顶点作为底座顶面": "Select a face or vertex as the base top",
+    "拉伸底座的终止边界": "Ending boundary for base extrusion",
+    "点击模型表面或顶点，底座将刚好贴合至该处。\n如果不选，系统将自动使用包围盒计算。": "Click a face/vertex to end the base there.\nIf empty, bounding box is used.",
+    "外径/六角对边": "Outer Dia / Hex AF",
+    "矩形 X 尺寸": "Box X Size",
+    "矩形 Y 尺寸": "Box Y Size",
+    "厚度": "Thickness",
+    "底面 Z": "Bottom Z",
+    "自动边距": "Auto Margin",
+    "X 单边公差": "X Clearance",
+    "Y 单边公差": "Y Clearance",
+    "Z 单边公差": "Z Clearance",
+    "零件每边补偿": "Part Offset Per Side",
+    "缩放中心": "Scale Center",
+    "手动 X 比例": "Manual X Scale",
+    "手动 Y 比例": "Manual Y Scale",
+    "手动 Z 比例": "Manual Z Scale",
+    "执行布尔切割": "Execute Boolean Cut",
+    "保留刀具": "Keep Cutter Bodies",
+    "<i>适用场景：为零件制作专属的安装底座，或快速打印公差配合测试件。</i>": "<i>Use case: Make dedicated bases or quick test fits.</i>",
+    "<i>适用场景：将其作为“刻刀”，在您设计的复杂外壳上，使用布尔运算精准挖出安装孔。</i>": "<i>Use case: Use as a boolean tool to cut precise holes.</i>",
+    "<i>适用场景：直接 3D 打印该零件时，预先抵消塑料热收缩误差，确保打印成品能顺利装配。</i>": "<i>Use case: Offset 3D printing shrinkage directly on the part.</i>",
+    "请先打开 Fusion 360 Design 文件。": "Please open a Fusion 360 Design file first.",
+    "请至少选择一个实体 Body。": "Please select at least one Solid Body.",
+    "正在分析几何体...": "Analyzing geometry...",
+    "正在提取并分析选定实体...": "Extracting and analyzing selected bodies...",
+    "正在计算实体布尔和缩放操作...": "Calculating boolean and scale operations...",
+    "创建命令面板失败": "Failed to create command panel",
+    "执行失败": "Execution failed",
+    "预览失败": "Preview failed",
+    "验证输入失败": "Validation failed",
+    "更新面板状态失败": "Failed to update panel visibility",
+    "选择要适配的实体（Solid Body）": "Select solid bodies",
+    "没有可处理的实体。": "No processable bodies.",
+    "开启封头时，必须选择一个【封头起点面】。请点选需要填平的坑底面或螺丝顶面。": "When Cap is enabled, you must select a [Cap Start Face].",
+    "面偏移计算失败。": "Surface offset calculation failed.",
+    "设置非均匀缩放失败。": "Failed to set non-uniform scale.",
+    "毛坯草图没有形成封闭轮廓。": "Blank sketch did not form a closed profile.",
+    "毛坯厚度必须大于 0。": "Blank thickness must be greater than 0.",
+    "毛坯拉伸失败。": "Blank extrusion failed.",
+    "封头圆柱创建失败。": "Failed to create seal cap cylinder.",
+    "布尔切割失败，请确认毛坯与放大刀具相交。": "Boolean cut failed, ensure blank intersects with tools.",
+    "不能计算空实体集合的包围盒。": "Cannot compute bounding box for empty bodies.",
+    "生成完成。": "Generation complete.",
+    "输入实体数量: %s": "Input bodies count: %s",
+    "操作: %s": "Operation: %s",
+    "适配策略: %s": "Fit Strategy: %s",
+    "缩放: X %.6f / Y %.6f / Z %.6f": "Scale: X %.6f / Y %.6f / Z %.6f",
+    "中心: %s": "Center: %s",
+    "打印补偿副本: %s": "Adjusted Print Copies: %s",
+    "刀具体: %s": "Cutter Bodies: %s",
+    "底座/毛坯: %s": "Base / Blank: %s",
+    "布尔特征: %s": "Boolean Feature: %s",
+    "已创建封头圆柱，注意它可能改变头部挖槽形状。": "Cap cylinder created.",
+    "警告:": "Warnings:",
+    "带 DO_NOT_PRINT 的刀具仅用于布尔切割，不要打印。": "Cutter bodies with DO_NOT_PRINT are only for boolean cuts."
+}
+
+_IS_ENGLISH = None
+
+def _is_english_mode():
+    global _IS_ENGLISH
+    if _IS_ENGLISH is not None:
+        return _IS_ENGLISH
+    _IS_ENGLISH = False
+    try:
+        if adsk is not None:
+            app = adsk.core.Application.get()
+            lang = app.preferences.generalPreferences.userLanguage
+            if lang not in (adsk.core.UserLanguages.ChinesePRCLanguage, getattr(adsk.core.UserLanguages, "ChineseTaiwanLanguage", -1)):
+                _IS_ENGLISH = True
+    except:
+        pass
+    return _IS_ENGLISH
+
+def _TR(text: str) -> str:
+    if _is_english_mode():
+        return _LANG_DICT.get(text, text)
+    return text
+
+def _tr_dict(d: dict) -> dict:
+    return {_TR(k): v for k, v in d.items()}
+
 OPERATION_OPTIONS = {
     "生成配套底座/孔槽": "cavity",
     "只生成布尔刀具": "tool",
@@ -85,6 +231,7 @@ PRESET_OPTIONS = ("M2", "M2.5", "M3", "M4", "M5", "M6", "M8", "M10", "自定义"
 
 _handlers = []
 _ui = None
+
 
 
 def _handler_base(name):
@@ -124,7 +271,7 @@ class CommandCreatedHandler(_handler_base("CommandCreatedEventHandler")):
                 destroy_handler,
             ])
         except Exception:
-            _log_error("创建命令面板失败", traceback.format_exc(), show_message_box=True)
+            _log_error(_TR("创建命令面板失败"), traceback.format_exc(), show_message_box=True)
 
 
 class ExecuteHandler(_handler_base("CommandEventHandler")):
@@ -135,7 +282,7 @@ class ExecuteHandler(_handler_base("CommandEventHandler")):
                 config, res_dict = result
                 _ui.messageBox(_format_result_message(config, res_dict))
         except Exception:
-            _log_error("执行失败", traceback.format_exc(), show_message_box=True)
+            _log_error(_TR("执行失败"), traceback.format_exc(), show_message_box=True)
 
 
 class ExecutePreviewHandler(_handler_base("CommandEventHandler")):
@@ -150,7 +297,7 @@ class ExecutePreviewHandler(_handler_base("CommandEventHandler")):
                     f.write(err)
             except:
                 pass
-            _log_error("预览失败", err, show_message_box=False)
+            _log_error(_TR("预览失败"), err, show_message_box=False)
 
 
 class ValidateInputsHandler(_handler_base("ValidateInputsEventHandler")):
@@ -161,14 +308,14 @@ class ValidateInputsHandler(_handler_base("ValidateInputsEventHandler")):
             args.areInputsValid = bool(selection_input and selection_input.selectionCount > 0)
         except Exception:
             args.areInputsValid = False
-            _log_error("验证输入失败", traceback.format_exc(), show_message_box=False)
+            _log_error(_TR("验证输入失败"), traceback.format_exc(), show_message_box=False)
 
 def _run_execution_pipeline(inputs, is_preview: bool):
     app = adsk.core.Application.get()
     design = adsk.fusion.Design.cast(app.activeProduct)
     if not design:
         if not is_preview and _ui:
-            _ui.messageBox("请先打开 Fusion 360 Design 文件。")
+            _ui.messageBox(_TR("请先打开 Fusion 360 Design 文件。"))
         return None
 
     progress = None
@@ -177,18 +324,18 @@ def _run_execution_pipeline(inputs, is_preview: bool):
         progress.cancelButtonText = "Cancel"
         progress.isBackgroundDependent = False
         progress.isCancelButtonShown = False
-        progress.show("3D 打印标准件适配", "正在分析几何体...", 0, 100, 0)
+        progress.show(_TR("3D打印标准件适配"), _TR("正在分析几何体..."), 0, 100, 0)
 
     try:
         if progress:
-            progress.message = "正在提取并分析选定实体..."
+            progress.message = _TR("正在提取并分析选定实体...")
             progress.progressValue = 10
             adsk.doEvents()
 
         bodies = _bodies_from_selection_input(inputs.itemById("source_bodies"))
         if not bodies:
             if not is_preview and _ui:
-                _ui.messageBox("请至少选择一个实体 Body。")
+                _ui.messageBox(_TR("请至少选择一个实体 Body。"))
             return None
 
         config_dict = _config_dict_from_inputs(inputs)
@@ -210,7 +357,7 @@ def _run_execution_pipeline(inputs, is_preview: bool):
         seal_entity = seal_ref_input.selection(0).entity if seal_ref_input and seal_ref_input.selectionCount > 0 else None
         
         if progress:
-            progress.message = "正在计算实体布尔和缩放操作..."
+            progress.message = _TR("正在计算实体布尔和缩放操作...")
             progress.progressValue = 40
             adsk.doEvents()
             
@@ -248,15 +395,15 @@ class InputChangedHandler(_handler_base("InputChangedEventHandler")):
                         dia_mm = cm_to_mm(radius_cm * 2.0)
                         preset = args.inputs.itemById("preset")
                         if preset:
-                            _select_dropdown_label(preset, "自定义")
+                            _select_dropdown_label(preset, _TR("自定义"))
                         dia_input = args.inputs.itemById("diameter")
                         if dia_input:
                             dia_input.expression = "%.3f mm" % dia_mm
             
             elif changed_id == "fit_profile":
                 profile = args.inputs.itemById("fit_profile")
-                if profile and profile.selectedItem.name != "自定义":
-                    val_str = FIT_PROFILES.get(profile.selectedItem.name)
+                if profile and profile.selectedItem.name != _TR("自定义"):
+                    val_str = _tr_dict(FIT_PROFILES).get(profile.selectedItem.name)
                     if val_str:
                         for cid in ("clearance", "clearance_x", "clearance_y"):
                             inp = args.inputs.itemById(cid)
@@ -266,10 +413,10 @@ class InputChangedHandler(_handler_base("InputChangedEventHandler")):
             elif changed_id in ("clearance", "clearance_x", "clearance_y", "clearance_z"):
                 profile = args.inputs.itemById("fit_profile")
                 if profile:
-                    _select_dropdown_label(profile, "自定义")
+                    _select_dropdown_label(profile, _TR("自定义"))
                             
         except Exception:
-            _log_error("更新面板状态失败", traceback.format_exc(), show_message_box=False)
+            _log_error(_TR("更新面板状态失败"), traceback.format_exc(), show_message_box=False)
 
 
 class ActivateHandler(_handler_base("CommandEventHandler")):
@@ -321,8 +468,8 @@ def run(context):
         if not command_definition:
             command_definition = ui.commandDefinitions.addButtonDefinition(
                 CMD_ID,
-                CMD_NAME,
-                CMD_DESCRIPTION,
+                _TR(CMD_NAME),
+                _TR(CMD_DESCRIPTION),
                 "",
             )
 
@@ -338,7 +485,7 @@ def run(context):
 
         adsk.autoTerminate(False)
     except Exception:
-        ui.messageBox("加载 3D 打印标准件适配 Add-In 失败：\n\n%s" % traceback.format_exc())
+        ui.messageBox(_TR("加载 3D 打印标准件适配 Add-In 失败：\n\n%s") % traceback.format_exc())
 
 
 def stop(context):
@@ -357,125 +504,121 @@ def stop(context):
         _handlers.clear()
     except Exception:
         if ui:
-            ui.messageBox("卸载 3D 打印标准件适配 Add-In 失败：\n\n%s" % traceback.format_exc())
+            ui.messageBox(_TR("卸载 3D 打印标准件适配 Add-In 失败：\n\n%s") % traceback.format_exc())
 
 
 def _build_command_dialog(inputs):
     overview = inputs.addTextBoxCommandInput(
         "overview",
         "",
-        "<b>3D 打印标准件适配</b><br/>选择实体，设置公差和底座形状，然后自动生成配套底座、布尔刀具或打印补偿副本。",
+        _TR("<b>3D 打印标准件适配</b><br/>选择实体，设置公差和底座形状，然后自动生成配套底座、布尔刀具或打印补偿副本。"),
         3,
         True,
     )
     overview.isFullWidth = True
 
-    selection_input = inputs.addSelectionInput("source_bodies", "操作实体", "选择一个或多个实体 Body")
+    selection_input = inputs.addSelectionInput("source_bodies", _TR("操作实体"), _TR("选择一个或多个实体 Body"))
     selection_input.addSelectionFilter("SolidBodies")
     selection_input.setSelectionLimits(1, 0)
 
-    tab_core = inputs.addTabCommandInput("tab_core", "零件与公差")
-    tab_geom = inputs.addTabCommandInput("tab_geom", "底座边界")
-    tab_adv = inputs.addTabCommandInput("tab_adv", "专家模式")
+    tab_core = inputs.addTabCommandInput("tab_core", _TR("零件与公差"))
+    tab_geom = inputs.addTabCommandInput("tab_geom", _TR("底座边界"))
+    tab_adv = inputs.addTabCommandInput("tab_adv", _TR("专家模式"))
 
     # 标签页 1：零件与公差
     core_inputs = tab_core.children
-    op_input = _add_dropdown(core_inputs, "operation", "操作类型", OPERATION_OPTIONS, "生成配套底座/孔槽")
-    op_input.tooltip = "选择要生成的结果类型"
-    op_input.tooltipDescription = (
-        "【配套底座/孔槽】：直接在外围生成带公差的孔槽底座。适用场景：为零件制作专属的安装底座，或快速打印公差配合测试件。\n"
-        "【生成刀具体】：提取放大后的零件本体（不含底座）。适用场景：将其作为“刻刀”，在您设计的复杂机械外壳上，使用布尔运算精准挖出安装孔。\n"
-        "【打印补偿副本】：对原零件本身进行尺寸补偿。适用场景：直接 3D 打印该零件时，预先抵消塑料热收缩误差（如缩小0.15mm），确保打印成品能顺利装配。"
-    )
+    op_input = _add_dropdown(core_inputs, "operation", _TR("操作类型"), _tr_dict(OPERATION_OPTIONS), _TR("生成配套底座/孔槽"))
+    op_input.tooltip = _TR("选择要生成的结果类型")
+    op_input.tooltipDescription = _TR("【配套底座/孔槽】：直接在外围生成带公差的孔槽底座。适用场景：为零件制作专属的安装底座，或快速打印公差配合测试件。\n【生成刀具体】：提取放大后的零件本体（不含底座）。适用场景：将其作为“刻刀”，在您设计的复杂机械外壳上，使用布尔运算精准挖出安装孔。\n【打印补偿副本】：对原零件本身进行尺寸补偿。适用场景：直接 3D 打印该零件时，预先抵消塑料热收缩误差（如缩小0.15mm），确保打印成品能顺利装配。")
     op_desc = core_inputs.addTextBoxCommandInput("op_desc", "", "", 2, True)
     op_desc.isFullWidth = True
 
-    fit_input = _add_dropdown(core_inputs, "fit", "适配策略", FIT_OPTIONS, "径向缩放 (仅 XY 方向, 需零件直立)")
-    fit_input.tooltip = "选择间隙生成的计算底层原理"
-    fit_input.tooltipDescription = "【径向缩放 (仅 XY 方向, 需零件直立)】：底部Z轴保持不变，专为螺丝/螺纹设计，保护螺距不被破坏。注意：必须确保零件在绝对坐标系中竖直向上放置 (Z-up)，否则由于 Fusion 360 缩放轴向限制，会导致变形！\n【等比缩放 (XYZ 方向)】：全方向均匀放大，速度极快，适合大部分对称零件。\n【真实面偏移】：沿法线严格推覆，极其精准但面数多时极其耗时。"
+    fit_input = _add_dropdown(core_inputs, "fit", _TR("适配策略"), _tr_dict(FIT_OPTIONS), _TR("径向缩放 (仅 XY 方向, 需零件直立)"))
+    fit_input.tooltip = _TR("选择间隙生成的计算底层原理")
+    fit_input.tooltipDescription = _TR("【径向缩放 (仅 XY 方向, 需零件直立)】：底部Z轴保持不变，专为螺丝/螺纹设计，保护螺距不被破坏。注意：必须确保零件在绝对坐标系中竖直向上放置 (Z-up)，否则由于 Fusion 360 缩放轴向限制，会导致变形！\n【等比缩放 (XYZ 方向)】：全方向均匀放大，速度极快，适合大部分对称零件。\n【真实面偏移】：沿法线严格推覆，极其精准但面数多时极其耗时。")
 
-    preset_input = _add_dropdown(core_inputs, "preset", "螺纹规格", {name: name for name in PRESET_OPTIONS}, "M4")
-    preset_input.tooltip = "快速选择标准件的外径尺寸"
+    preset_input = _add_dropdown(core_inputs, "preset", _TR("螺纹规格"), _tr_dict({name: name for name in PRESET_OPTIONS}), _TR("M4"))
+    preset_input.tooltip = _TR("快速选择标准件的外径尺寸")
 
-    dia_ref = core_inputs.addSelectionInput("diameter_ref", "圆柱参考/定心点 (可选)", "选择圆柱面/圆边提取直径和圆心。或者单独选择一个顶点/草图点来强制指定圆心（此时需手动输入直径）。")
+    dia_ref = core_inputs.addSelectionInput("diameter_ref", _TR("圆柱参考/定心点 (可选)"), _TR("选择圆柱面/圆边提取直径和圆心。或者单独选择一个顶点/草图点来强制指定圆心（此时需手动输入直径）。"))
     dia_ref.addSelectionFilter("CircularEdges")
     dia_ref.addSelectionFilter("CylindricalFaces")
     dia_ref.addSelectionFilter("Vertices")
     dia_ref.addSelectionFilter("SketchPoints")
     dia_ref.addSelectionFilter("ConstructionPoints")
     dia_ref.setSelectionLimits(0, 1)
-    dia_ref.tooltip = "智能提取圆心与直径"
-    dia_ref.tooltipDescription = "如果您不知道模型直径，请点选屏幕上的圆环边缘或圆柱面，系统会自动提取其真实的直径并填入下方，同时全参数化绑定该几何中心。\n如果您只想自定义缩放中心而不修改直径，请直接选择屏幕上的某个点（顶点、草图点等）。"
+    dia_ref.tooltip = _TR("智能提取圆心与直径")
+    dia_ref.tooltipDescription = _TR("如果您不知道模型直径，请点选屏幕上的圆环边缘或圆柱面，系统会自动提取其真实的直径并填入下方，同时全参数化绑定该几何中心。\n如果您只想自定义缩放中心而不修改直径，请直接选择屏幕上的某个点（顶点、草图点等）。")
 
-    _add_value(core_inputs, "diameter", "自定义直径", "4.0 mm")
+    _add_value(core_inputs, "diameter", _TR("自定义直径"), "4.0 mm")
 
-    fit_prof = _add_dropdown(core_inputs, "fit_profile", "公差预设", {k: k for k in FIT_PROFILES}, "宽松插入 (+0.20mm)")
-    fit_prof.tooltip = "快速设置常见的 3D 打印公差"
-    fit_prof.tooltipDescription = "宽松插入：适合需要顺滑插入、经常拔插的零件。\n精准/滑动：适合要求严丝合缝的卡扣或滑动件。\n过盈/热熔：用于强行压入或用电烙铁加热植入铜花母（热熔嵌件）。"
+    fit_prof = _add_dropdown(core_inputs, "fit_profile", _TR("公差预设"), _tr_dict({k: k for k in FIT_PROFILES}), _TR("宽松插入 (+0.20mm)"))
+    fit_prof.tooltip = _TR("快速设置常见的 3D 打印公差")
+    fit_prof.tooltipDescription = _TR("宽松插入：适合需要顺滑插入、经常拔插的零件。\n精准/滑动：适合要求严丝合缝的卡扣或滑动件。\n过盈/热熔：用于强行压入或用电烙铁加热植入铜花母（热熔嵌件）。")
 
-    clear_input = _add_value(core_inputs, "clearance", "单边公差", "0.20 mm")
-    clear_input.tooltip = "零件四周预留的装配空隙"
-    clear_input.tooltipDescription = "通常 3D 打印推荐设置在 0.15mm - 0.25mm 之间。此数值将生成为全局参数，可随时修改。"
+    clear_input = _add_value(core_inputs, "clearance", _TR("单边公差"), "0.20 mm")
+    clear_input.tooltip = _TR("零件四周预留的装配空隙")
+    clear_input.tooltipDescription = _TR("通常 3D 打印推荐设置在 0.15mm - 0.25mm 之间。此数值将生成为全局参数，可随时修改。")
 
-    seal_enable = core_inputs.addBoolValueInput("seal_enable", "开启封头 (填平坑洞并突破)", True, "", False)
-    seal_enable.tooltip = "将坑洞完全填平为实心，并可向外延伸"
-    seal_enable.tooltipDescription = "勾选后，插件会自动填满您选择的平面或坑底，并可以往外挤出一段距离，形成一个无缝的完美打孔刀具。"
+    seal_enable = core_inputs.addBoolValueInput("seal_enable", _TR("开启封头 (填平坑洞并突破)"), True, "", False)
+    seal_enable.tooltip = _TR("将坑洞完全填平为实心，并可向外延伸")
+    seal_enable.tooltipDescription = _TR("勾选后，插件会自动填满您选择的平面或坑底，并可以往外挤出一段距离，形成一个无缝的完美打孔刀具。")
     
-    seal_ref = core_inputs.addSelectionInput("seal_ref", "封头起点面 (必选)", "请点选螺丝顶面或内六角坑的底面。插件将从该高度开始填平并向外突破。")
+    seal_ref = core_inputs.addSelectionInput("seal_ref", _TR("封头起点面 (必选)"), _TR("请点选螺丝顶面或内六角坑的底面。插件将从该高度开始填平并向外突破。"))
     seal_ref.addSelectionFilter("PlanarFaces")
     seal_ref.addSelectionFilter("CircularEdges")
     seal_ref.setSelectionLimits(0, 1)
     
-    seal_length = _add_value(core_inputs, "seal_length", "向外突破长度", "2 mm")
-    seal_length.tooltip = "封头高出螺丝顶部的额外贯穿距离"
-    seal_length.tooltipDescription = "确保刀具有足够的长度刺穿外壳。如果您只想要填平坑洞而不冒出头，可以设为 0 mm。"
+    seal_length = _add_value(core_inputs, "seal_length", _TR("向外突破长度"), "2 mm")
+    seal_length.tooltip = _TR("封头高出螺丝顶部的额外贯穿距离")
+    seal_length.tooltipDescription = _TR("确保刀具有足够的长度刺穿外壳。如果您只想要填平坑洞而不冒出头，可以设为 0 mm。")
 
     # 标签页 2：底座边界
     geom_inputs = tab_geom.children
 
-    blank_group = geom_inputs.addGroupCommandInput("blank_group", "底座/毛坯设置")
+    blank_group = geom_inputs.addGroupCommandInput("blank_group", _TR("底座/毛坯设置"))
     blank_group.isExpanded = True
     blank_inputs = blank_group.children
-    _add_dropdown(blank_inputs, "blank", "底座生成方式", BLANK_OPTIONS, "矩形底座")
+    _add_dropdown(blank_inputs, "blank", _TR("底座生成方式"), _tr_dict(BLANK_OPTIONS), _TR("矩形底座"))
     
-    bottom_ref = blank_inputs.addSelectionInput("bottom_ref", "底面参考 (可选)", "选择模型表面、顶点作为底座底面")
+    bottom_ref = blank_inputs.addSelectionInput("bottom_ref", _TR("底面参考 (可选)"), _TR("选择模型表面、顶点作为底座底面"))
     bottom_ref.addSelectionFilter("SolidFaces")
     bottom_ref.addSelectionFilter("ConstructionPlanes")
     bottom_ref.addSelectionFilter("Vertices")
     bottom_ref.addSelectionFilter("SketchPoints")
     bottom_ref.setSelectionLimits(0, 1)
-    bottom_ref.tooltip = "拉伸底座的起始边界"
-    bottom_ref.tooltipDescription = "点击模型表面或顶点，底座将以此为起点。\n如果不选，系统将自动使用包围盒计算。"
+    bottom_ref.tooltip = _TR("拉伸底座的起始边界")
+    bottom_ref.tooltipDescription = _TR("点击模型表面或顶点，底座将以此为起点。\n如果不选，系统将自动使用包围盒计算。")
     
-    top_ref = blank_inputs.addSelectionInput("top_ref", "顶面参考 (可选)", "选择模型表面、顶点作为底座顶面")
+    top_ref = blank_inputs.addSelectionInput("top_ref", _TR("顶面参考 (可选)"), _TR("选择模型表面、顶点作为底座顶面"))
     top_ref.addSelectionFilter("SolidFaces")
     top_ref.addSelectionFilter("ConstructionPlanes")
     top_ref.addSelectionFilter("Vertices")
     top_ref.addSelectionFilter("SketchPoints")
     top_ref.setSelectionLimits(0, 1)
-    top_ref.tooltip = "拉伸底座的终止边界"
-    top_ref.tooltipDescription = "点击模型表面或顶点，底座将刚好贴合至该处。\n如果不选，系统将自动使用包围盒计算。"
+    top_ref.tooltip = _TR("拉伸底座的终止边界")
+    top_ref.tooltipDescription = _TR("点击模型表面或顶点，底座将刚好贴合至该处。\n如果不选，系统将自动使用包围盒计算。")
     
-    _add_value(blank_inputs, "outer", "外径/六角对边", "8.0 mm")
-    _add_value(blank_inputs, "box_x", "矩形 X 尺寸", "0 mm")
-    _add_value(blank_inputs, "box_y", "矩形 Y 尺寸", "0 mm")
-    _add_value(blank_inputs, "thickness", "厚度", "4.8 mm")
-    _add_value(blank_inputs, "z_start", "底面 Z", "0 mm")
-    _add_value(blank_inputs, "margin", "自动边距", "2.0 mm")
+    _add_value(blank_inputs, "outer", _TR("外径/六角对边"), "8.0 mm")
+    _add_value(blank_inputs, "box_x", _TR("矩形 X 尺寸"), "0 mm")
+    _add_value(blank_inputs, "box_y", _TR("矩形 Y 尺寸"), "0 mm")
+    _add_value(blank_inputs, "thickness", _TR("厚度"), "4.8 mm")
+    _add_value(blank_inputs, "z_start", _TR("底面 Z"), "0 mm")
+    _add_value(blank_inputs, "margin", _TR("自动边距"), "2.0 mm")
 
     # 标签页 3：专家模式
     adv_inputs = tab_adv.children
-    _add_value(adv_inputs, "clearance_x", "X 单边公差", "0.20 mm")
-    _add_value(adv_inputs, "clearance_y", "Y 单边公差", "0.20 mm")
-    _add_value(adv_inputs, "clearance_z", "Z 单边公差", "0.00 mm")
-    _add_value(adv_inputs, "fit_adjust", "零件每边补偿", "-0.10 mm")
+    _add_value(adv_inputs, "clearance_x", _TR("X 单边公差"), "0.20 mm")
+    _add_value(adv_inputs, "clearance_y", _TR("Y 单边公差"), "0.20 mm")
+    _add_value(adv_inputs, "clearance_z", _TR("Z 单边公差"), "0.00 mm")
+    _add_value(adv_inputs, "fit_adjust", _TR("零件每边补偿"), "-0.10 mm")
     
-    _add_dropdown(adv_inputs, "center", "缩放中心", CENTER_OPTIONS, "原点：适合螺纹轴心在原点")
-    adv_inputs.addStringValueInput("scale_x", "手动 X 比例", "")
-    adv_inputs.addStringValueInput("scale_y", "手动 Y 比例", "")
-    adv_inputs.addStringValueInput("scale_z", "手动 Z 比例", "")
-    adv_inputs.addBoolValueInput("cut", "执行布尔切割", True, "", True)
-    adv_inputs.addBoolValueInput("keep_tool", "保留刀具", True, "", True)
+    _add_dropdown(adv_inputs, "center", _TR("缩放中心"), _tr_dict(CENTER_OPTIONS), _TR("原点：适合螺纹轴心在原点"))
+    adv_inputs.addStringValueInput("scale_x", _TR("手动 X 比例"), "")
+    adv_inputs.addStringValueInput("scale_y", _TR("手动 Y 比例"), "")
+    adv_inputs.addStringValueInput("scale_z", _TR("手动 Z 比例"), "")
+    adv_inputs.addBoolValueInput("cut", _TR("执行布尔切割"), True, "", True)
+    adv_inputs.addBoolValueInput("keep_tool", _TR("保留刀具"), True, "", True)
 
     _sync_dialog_visibility(inputs)
 
@@ -492,9 +635,9 @@ def _add_value(inputs, input_id, label, expression):
 
 
 def _sync_dialog_visibility(inputs, changed_id=""):
-    fit = _selected_value(inputs.itemById("fit"), FIT_OPTIONS)
-    operation = _selected_value(inputs.itemById("operation"), OPERATION_OPTIONS)
-    blank = _selected_value(inputs.itemById("blank"), BLANK_OPTIONS)
+    fit = _selected_value(inputs.itemById("fit"), _tr_dict(FIT_OPTIONS))
+    operation = _selected_value(inputs.itemById("operation"), _tr_dict(OPERATION_OPTIONS))
+    blank = _selected_value(inputs.itemById("blank"), _tr_dict(BLANK_OPTIONS))
 
     is_thread = fit == "thread"
     is_manual = fit == "manual"
@@ -523,27 +666,27 @@ def _sync_dialog_visibility(inputs, changed_id=""):
     op_desc = inputs.itemById("op_desc")
     if op_desc:
         if operation == "cavity":
-            op_desc.text = "<i>适用场景：为零件制作专属的安装底座，或快速打印公差配合测试件。</i>"
+            op_desc.text = _TR("<i>适用场景：为零件制作专属的安装底座，或快速打印公差配合测试件。</i>")
         elif operation == "tool":
-            op_desc.text = "<i>适用场景：将其作为“刻刀”，在您设计的复杂外壳上，使用布尔运算精准挖出安装孔。</i>"
+            op_desc.text = _TR("<i>适用场景：将其作为“刻刀”，在您设计的复杂外壳上，使用布尔运算精准挖出安装孔。</i>")
         elif operation == "part":
-            op_desc.text = "<i>适用场景：直接 3D 打印该零件时，预先抵消塑料热收缩误差，确保打印成品能顺利装配。</i>"
+            op_desc.text = _TR("<i>适用场景：直接 3D 打印该零件时，预先抵消塑料热收缩误差，确保打印成品能顺利装配。</i>")
         else:
             op_desc.text = ""
 
     center_input = inputs.itemById("center")
     if center_input and changed_id == "fit" and fit != "thread":
-        _select_dropdown_label(center_input, "自动：包围盒中心 (适合对称体)")
+        _select_dropdown_label(center_input, _TR("自动：包围盒中心 (适合对称体)"))
     elif center_input and changed_id == "fit":
-        _select_dropdown_label(center_input, "智能：基于点选圆提取 (推荐)")
+        _select_dropdown_label(center_input, _TR("智能：基于点选圆提取 (推荐)"))
 
     blank_input = inputs.itemById("blank")
     if blank_input and operation == "tool":
-        _select_dropdown_label(blank_input, "不生成底座")
+        _select_dropdown_label(blank_input, _TR("不生成底座"))
     elif blank_input and changed_id in {"fit", "operation"} and is_thread and operation == "cavity":
-        _select_dropdown_label(blank_input, "六角螺母")
-    elif blank_input and changed_id in {"fit", "operation"} and operation == "cavity" and not is_thread and _selected_value(blank_input, BLANK_OPTIONS) == "hex":
-        _select_dropdown_label(blank_input, "矩形底座")
+        _select_dropdown_label(blank_input, _TR("六角螺母"))
+    elif blank_input and changed_id in {"fit", "operation"} and operation == "cavity" and not is_thread and _selected_value(blank_input, _tr_dict(BLANK_OPTIONS)) == "hex":
+        _select_dropdown_label(blank_input, _TR("矩形底座"))
 
 
 def _set_visible(inputs, ids, visible):
@@ -575,17 +718,17 @@ def _optional_positive_mm(inputs, input_id):
 
 
 def _config_dict_from_inputs(inputs):
-    operation = _selected_value(inputs.itemById("operation"), OPERATION_OPTIONS)
-    fit = _selected_value(inputs.itemById("fit"), FIT_OPTIONS)
-    blank = _selected_value(inputs.itemById("blank"), BLANK_OPTIONS)
-    center = _selected_value(inputs.itemById("center"), CENTER_OPTIONS)
+    operation = _selected_value(inputs.itemById("operation"), _tr_dict(OPERATION_OPTIONS))
+    fit = _selected_value(inputs.itemById("fit"), _tr_dict(FIT_OPTIONS))
+    blank = _selected_value(inputs.itemById("blank"), _tr_dict(BLANK_OPTIONS))
+    center = _selected_value(inputs.itemById("center"), _tr_dict(CENTER_OPTIONS))
     seal_enable_input = inputs.itemById("seal_enable")
     seal = "cylinder" if (seal_enable_input and seal_enable_input.value) else "none"
 
     params = {
         "operation": operation,
         "fit": fit,
-        "preset": _selected_value(inputs.itemById("preset"), {name: name for name in PRESET_OPTIONS}),
+        "preset": _selected_value(inputs.itemById("preset"), _tr_dict({name: name for name in PRESET_OPTIONS})),
         "diameter": str(_mm_value(inputs.itemById("diameter"))),
         "clearance": str(_mm_value(inputs.itemById("clearance"))),
         "clearance_x": str(_mm_value(inputs.itemById("clearance_x"))),
@@ -683,7 +826,7 @@ def _find_smart_center_from_bodies(bodies):
 def create_print_fit_adapter(root, source_bodies, config: AdapterConfig, top_entity=None, bottom_entity=None, center_entity=None, seal_entity=None, is_preview=False, progress=None):
     source_bodies = list(source_bodies)
     if not source_bodies:
-        raise RuntimeError("没有可处理的实体。")
+        raise RuntimeError(_TR("没有可处理的实体。"))
         
     seal_z_cm = None
     if seal_entity:
@@ -697,7 +840,7 @@ def create_print_fit_adapter(root, source_bodies, config: AdapterConfig, top_ent
             seal_z_cm = seal_entity.boundingBox.minPoint.z
             
     if config.seal == "cylinder" and seal_z_cm is None:
-        raise RuntimeError("开启封头时，必须选择一个【封头起点面】。请点选需要填平的坑底面或螺丝顶面。")
+        raise RuntimeError(_TR("开启封头时，必须选择一个【封头起点面】。请点选需要填平的坑底面或螺丝顶面。"))
 
     safe_name = _safe_name(config.name)
     source_box = _union_bounding_box(source_bodies)
@@ -820,7 +963,7 @@ def create_print_fit_adapter(root, source_bodies, config: AdapterConfig, top_ent
                 _scale_bodies(root, working_bodies, center_point, scales, "Print compensation scale (preview fallback)", scale_exprs)
             else:
                 if progress:
-                    progress.message = f"正在进行真实面偏移计算 ({total_faces} 个曲面)，极耗时请耐心等待..."
+                    progress.message = _TR("正在进行真实面偏移计算 ({total_faces} 个曲面)，极耗时请耐心等待...").replace("{total_faces}", str(total_faces))
                     adsk.doEvents()
                 try:
                     feature, offset_bodies = _offset_body_faces(root, working_bodies, offset_expr, "Print compensation offset")
@@ -848,7 +991,7 @@ def create_print_fit_adapter(root, source_bodies, config: AdapterConfig, top_ent
             _scale_bodies(root, working_bodies, center_point, scales, "Print-fit cutter scale (preview fallback)", scale_exprs)
         else:
             if progress:
-                progress.message = f"正在进行真实面偏移计算 ({total_faces} 个曲面)，极耗时请耐心等待..."
+                progress.message = _TR("正在进行真实面偏移计算 ({total_faces} 个曲面)，极耗时请耐心等待...").replace("{total_faces}", str(total_faces))
                 adsk.doEvents()
             try:
                 feature, offset_bodies = _offset_body_faces(root, working_bodies, offset_expr, "Print-fit cutter offset")
@@ -929,7 +1072,7 @@ def _select_source_bodies(ui):
         return bodies
 
     try:
-        selection = ui.selectEntity("选择要适配的实体（Solid Body）", "SolidBodies")
+        selection = ui.selectEntity(_TR("选择要适配的实体（Solid Body）"), "SolidBodies")
     except Exception:
         return []
     if not selection:
@@ -943,7 +1086,7 @@ def _copy_bodies_to_root(root, bodies):
     for body in bodies:
         copied = body.copyToComponent(root)
         if not copied:
-            raise RuntimeError("复制实体失败：%s" % (body.name or "(unnamed body)"))
+            raise RuntimeError(_TR("复制实体失败：%s") % (body.name or "(unnamed body)"))
         copies.append(copied)
     return copies
 
@@ -962,7 +1105,7 @@ def _offset_body_faces(root, bodies, offset_expr_str, feature_name):
     )
     feature = offset_features.add(offset_input)
     if not feature or feature.bodies.count < len(bodies):
-        raise RuntimeError("面偏移计算失败。")
+        raise RuntimeError(_TR("面偏移计算失败。"))
         
     new_bodies = []
     for i in range(feature.bodies.count):
@@ -996,7 +1139,7 @@ def _scale_bodies(root, bodies, scale_point, scales, feature_name, scale_exprs=N
             adsk.core.ValueInput.createByReal(scales[2]),
         )
     if not ok:
-        raise RuntimeError("设置非均匀缩放失败。")
+        raise RuntimeError(_TR("设置非均匀缩放失败。"))
     feature = scale_features.add(scale_input)
     if feature:
         feature.name = "%s %.6f %.6f %.6f" % (feature_name, scales[0], scales[1], scales[2])
@@ -1010,7 +1153,7 @@ def _create_offset_xy_plane(root, z_mm: float, name: str):
         adsk.core.ValueInput.createByString("%g mm" % z_mm),
     )
     if not ok:
-        raise RuntimeError("创建偏移平面失败: %s" % name)
+        raise RuntimeError(_TR("创建偏移平面失败: %s") % name)
     plane = root.constructionPlanes.add(plane_input)
     plane.name = name
     return plane
@@ -1064,7 +1207,7 @@ def _create_blank(root, config: AdapterConfig, tool_box, safe_name, top_entity=N
         raise RuntimeError("unsupported blank type %s" % config.blank)
 
     if sketch.profiles.count < 1:
-        raise RuntimeError("毛坯草图没有形成封闭轮廓。")
+        raise RuntimeError(_TR("毛坯草图没有形成封闭轮廓。"))
 
     extrude_input = root.features.extrudeFeatures.createInput(sketch.profiles.item(0), adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
     
@@ -1084,7 +1227,7 @@ def _create_blank(root, config: AdapterConfig, tool_box, safe_name, top_entity=N
     else:
         thickness_mm = config.thickness_mm if config.thickness_mm is not None else size_z + 2.0 * config.margin_z_mm
         if thickness_mm <= 0:
-            raise RuntimeError("毛坯厚度必须大于 0。")
+            raise RuntimeError(_TR("毛坯厚度必须大于 0。"))
         _get_or_create(f"{safe_prefix}_Blank_Thick", f"{thickness_mm} mm", "mm")
         extent_def = adsk.fusion.DistanceExtentDefinition.create(adsk.core.ValueInput.createByString(f"{safe_prefix}_Blank_Thick"))
         extrude_input.setOneSideExtent(extent_def, adsk.fusion.ExtentDirections.PositiveExtentDirection)
@@ -1092,7 +1235,7 @@ def _create_blank(root, config: AdapterConfig, tool_box, safe_name, top_entity=N
     extrude = root.features.extrudeFeatures.add(extrude_input)
     sketch.isVisible = False
     if not extrude or extrude.bodies.count < 1:
-        raise RuntimeError("毛坯拉伸失败。")
+        raise RuntimeError(_TR("毛坯拉伸失败。"))
     return extrude.bodies.item(0)
 
 
@@ -1180,7 +1323,7 @@ def _create_cylindrical_seal_cap(root, tool_box, center_point, seal_z_cm, config
     sketch.isVisible = False
     plane.isLightBulbOn = False
     if not extrude or extrude.bodies.count < 1:
-        raise RuntimeError("封头圆柱创建失败。")
+        raise RuntimeError(_TR("封头圆柱创建失败。"))
     cap = extrude.bodies.item(0)
     cap.name = "%s_seal_cap_DO_NOT_PRINT" % _safe_name(config.name)
     return cap
@@ -1195,14 +1338,14 @@ def _cut_blank_with_tools(root, blank_body, tool_bodies, keep_tool: bool):
     combine_input.isKeepToolBodies = keep_tool
     feature = root.features.combineFeatures.add(combine_input)
     if not feature:
-        raise RuntimeError("布尔切割失败，请确认毛坯与放大刀具相交。")
+        raise RuntimeError(_TR("布尔切割失败，请确认毛坯与放大刀具相交。"))
     feature.name = "Cut print-fit cavity"
     return feature
 
 
 def _union_bounding_box(bodies):
     if not bodies:
-        raise RuntimeError("不能计算空实体集合的包围盒。")
+        raise RuntimeError(_TR("不能计算空实体集合的包围盒。"))
     first = bodies[0].boundingBox
     min_x = first.minPoint.x
     min_y = first.minPoint.y
@@ -1256,29 +1399,29 @@ def _box_values_mm(box):
 def _format_result_message(config: AdapterConfig, result) -> str:
     scales = result["scales"]
     lines = [
-        "生成完成。",
+        _TR("生成完成。"),
         "",
-        "输入实体数量: %s" % result["source_count"],
-        "操作: %s" % result["operation"],
-        "适配策略: %s" % result["fit"],
-        "缩放: X %.6f / Y %.6f / Z %.6f" % (scales[0], scales[1], scales[2]),
-        "中心: %s" % config.center,
+        _TR("输入实体数量: %s") % result["source_count"],
+        _TR("操作: %s") % result["operation"],
+        _TR("适配策略: %s") % result["fit"],
+        _TR("缩放: X %.6f / Y %.6f / Z %.6f") % (scales[0], scales[1], scales[2]),
+        _TR("中心: %s") % config.center,
     ]
     if result["part_names"]:
-        lines.append("打印补偿副本: %s" % ", ".join(result["part_names"]))
+        lines.append(_TR("打印补偿副本: %s") % ", ".join(result["part_names"]))
     if result["tool_names"]:
-        lines.append("刀具体: %s" % ", ".join(result["tool_names"]))
+        lines.append(_TR("刀具体: %s") % ", ".join(result["tool_names"]))
     if result["blank_name"]:
-        lines.append("底座/毛坯: %s" % result["blank_name"])
+        lines.append(_TR("底座/毛坯: %s") % result["blank_name"])
     if result["combine_feature"]:
-        lines.append("布尔特征: %s" % result["combine_feature"])
+        lines.append(_TR("布尔特征: %s") % result["combine_feature"])
     if result["cap_created"]:
-        lines.append("已创建封头圆柱，注意它可能改变头部挖槽形状。")
+        lines.append(_TR("已创建封头圆柱，注意它可能改变头部挖槽形状。"))
     if config.warning_messages:
-        lines.extend(["", "警告:"])
+        lines.extend(["", _TR("警告:")])
         lines.extend("- %s" % message for message in config.warning_messages)
     if config.operation in {"tool", "cavity"}:
-        lines.extend(["", "带 DO_NOT_PRINT 的刀具仅用于布尔切割，不要打印。"])
+        lines.extend(["", _TR("带 DO_NOT_PRINT 的刀具仅用于布尔切割，不要打印。")])
     return "\n".join(lines)
 
 
