@@ -6,7 +6,6 @@
 专为 3D 打印设计的 Fusion 360 自动化辅助插件。用于将 McMaster-Carr 或其他渠道导入的“零公差标准件”（如螺丝、螺母、轴承、齿轮等），一键生成带有精准 3D 打印公差的**容纳底座**、**布尔切割刀具**或**补偿副本**。
 
 ![Plugin Overview Placeholder](docs/images/overview.png)
-*(需要一张总览图：展示一个复杂的标准件和它一键生成的半透明底座对比)*
 
 ## 🌟 核心特性
 
@@ -22,7 +21,6 @@
 - **手动接管**：如果极度异形，您仍可手动点选任意残破的“半圆弧”或“顶点”强制覆盖原点。
 
 ![Smart Center Placeholder](docs/images/smart_center.png)
-*(需要一张截图：鼠标放置在一半残缺的螺丝边缘，展示智能圆心提取功能)*
 
 ### 3. 智能无缝封头与向外突破 (Smart Seal & Breakthrough)
 针对内六角、沉头或带有复杂倒角的螺丝，传统算法在布尔切割时往往留下残留。
@@ -45,7 +43,6 @@
 5. 在列表中找到 `PrintFitThreadTools`，勾选 `启动时运行 (Run on Startup)` 并点击 `运行 (Run)`。
 
 ![Install Guide Placeholder](docs/images/install_guide.png)
-*(需要一张截图：Fusion 360 附加模块管理器界面，高亮本项目并显示打勾的状态)*
 
 ## 🚀 使用指南
 
@@ -56,7 +53,6 @@
 5. **确定**：一切都将在时间轴中完全参数化地生成，绝不卡顿。
 
 ![UI Panel Placeholder](docs/images/ui_panel.png)
-*(需要一张截图：插件在右侧展开的全新 UI 选项卡界面，展示丰富的设计选项)*
 
 ## ⚙️ 进阶专家模式
 
