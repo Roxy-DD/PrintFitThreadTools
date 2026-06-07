@@ -1,6 +1,6 @@
 # PrintFitThreadTools 使用说明书
 
-![版本](https://img.shields.io/badge/version-1.1.1-blue)
+![版本](https://img.shields.io/badge/version-1.1.2-blue)
 ![平台](https://img.shields.io/badge/platform-Fusion%20360-orange)
 
 ## 1. 简介
@@ -62,6 +62,9 @@ PrintFitThreadTools 是一款为 Fusion 360 开发的辅助插件。主要用于
 - 支持手动输入数值以覆盖全局的缩放比例或高度参数。
 
 ## 6. 版本记录
+
+### v1.1.2
+- CI/CD：修复 GitHub Actions 自动打包发布时缺失 `write` 权限的问题。
 
 ### v1.1.1
 - 增加自动化构建：接入 GitHub Actions 自动发布流程。

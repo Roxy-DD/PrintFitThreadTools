@@ -8,6 +8,6 @@
   "supportedOS": "windows|mac",
   "editEnabled": true,
   "id": "7e62d2f3-0ab6-4c2d-99d6-9b1f4aa0e77d",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "runOnStartup": true
 }
