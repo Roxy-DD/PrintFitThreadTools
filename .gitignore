@@ -1,8 +1,39 @@
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Test / lint caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+
+# Local env (machine-specific Fusion PYTHONPATH, etc.)
 .env
+.env.*
+!.env.example
+
+# Editor / IDE (local debug configs)
 .vscode/
-*.pyc
+.idea/
+*.swp
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log

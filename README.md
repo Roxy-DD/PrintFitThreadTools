@@ -7,6 +7,7 @@
 [![Fusion 360](https://img.shields.io/badge/Fusion%20360-Add--in-0696D7?style=flat-square&logo=autodesk)](https://www.autodesk.com/products/fusion-360)
 [![Python](https://img.shields.io/badge/Python-3.x-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey?style=flat-square)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
 [中文](#中文) · [English](#english)
 
@@ -206,6 +207,12 @@ python tools/clearance_table.py --clearance 0.2 M2 M2.5 M3 M4 M5 M6
 
 更多原理说明见 [docs/principles.md](docs/principles.md)。
 
+### 开源许可
+
+本项目采用 [MIT License](LICENSE) 开源。
+
+你可以自由使用、修改和分发本软件，但需保留原始版权声明与许可文本。软件按「原样」提供，不提供任何明示或暗示的担保。
+
 ---
 
 <a id="english"></a>
@@ -368,10 +375,18 @@ python tools/clearance_table.py --clearance 0.2 M2 M2.5 M3 M4 M5 M6
 
 See [docs/principles.md](docs/principles.md) for detailed design notes.
 
+### License
+
+This project is licensed under the [MIT License](LICENSE).
+
+You may use, modify, and distribute this software freely, provided that the original copyright notice and license text are retained. The software is provided "as is", without warranty of any kind.
+
 ---
 
 <div align="center">
 
 <sub>Made for makers who print plastic parts and assemble with real hardware.</sub>
+
+<br/><sub>© 2026 Roxy-DD · MIT License</sub>
 
 </div>
